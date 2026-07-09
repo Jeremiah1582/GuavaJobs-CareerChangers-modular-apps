@@ -1,0 +1,12 @@
+# Local Redis for Phase 0 (job cache / BullMQ).
+# Postgres: Supabase (set DATABASE_URL + DIRECT_URL in .env — see .env.example).
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5

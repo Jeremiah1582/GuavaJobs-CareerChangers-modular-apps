@@ -1,0 +1,349 @@
+// GuavaJobs — Prisma schema
+// Aligned with docs/PRODUCT_SPEC.md (§7 Data Model)
+//
+// Excluded from Postgres (see docs/PRODUCT_SPEC.md §6.3):
+//   Job, JobMatch, ScrapeRun — live jobs in Redis
+//   ChatMessage — AI coaching (v2)
+//   SavedJob, SavedJobSearch — bookmarks/alerts (v1.2+)
+//   CalendarConnection — Google Calendar sync (v2, with Google OAuth)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // Required when DATABASE_URL uses Supabase *pooler* (port 6543 or pooler host).
+  // Point DIRECT_URL at the direct DB host (port 5432) for migrations only.
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum UserTier {
+  FREE
+  PAID
+}
+
+enum SeniorityLevel {
+  INTERN
+  JUNIOR
+  MID
+  SENIOR
+  LEAD
+  EXECUTIVE
+  C_LEVEL
+}
+
+enum SalaryPeriod {
+  ANNUAL
+  MONTHLY
+  HOURLY
+}
+
+enum CvParseStatus {
+  PENDING
+  READY
+  FAILED
+}
+
+enum ApplicationStatus {
+  DRAFT
+  APPLIED
+  INTERVIEWING
+  OFFER
+  OFFER_ACCEPTED
+  OFFER_DECLINED
+  HIRED
+  REJECTED
+  WITHDRAWN
+  ARCHIVED
+}
+
+enum ApplicationGenerationMode {
+  AI
+  MANUAL
+}
+
+enum ApplicationRejectionPhase {
+  PRE_INTERVIEW
+  POST_INTERVIEW
+}
+
+enum CoverLetterSource {
+  AI
+  MANUAL
+}
+
+enum ApplicationEventType {
+  RESPONSE
+  INTERVIEW
+  NOTE
+  NEXT_STEP
+  STATUS_CHANGE
+}
+
+// Predetermined industry for profile ATS scoring (keywords/expectations vary by field).
+enum ProfileIndustry {
+  SOFTWARE
+  SALES
+  DATA_ANALYSIS
+  FINANCE
+  HR
+  MARKETING
+  OPERATIONS
+  PRODUCT
+  DESIGN
+  OTHER
+}
+
+// Async AI package generation (Phase 3 — BullMQ background workers).
+enum ApplicationGenerationStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+// ─── User (synced from Supabase Auth) ────────────────────────────────────────
+// Auth (sign-up, sign-in, sign-out) is handled by Supabase Auth on the client.
+// API validates Supabase JWT and upserts this row on first authenticated request.
+
+model User {
+  id          String  @id // Supabase Auth user UUID (auth.users.id)
+  email       String  @unique
+  name        String
+  imgUrl      String?
+  linkedinUrl String?
+  githubUrl   String?
+
+  tier                    UserTier  @default(FREE)
+  aiGenerationsUsedPeriod Int       @default(0) @map("ai_generations_used_period")
+  usagePeriodStart        DateTime?
+
+  // Reserved home for AI Career Consultation (v2): consultation answers,
+  // inferred goals, target industries, positioning/targeting preferences.
+  metadata Json? @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  profiles     Profile[]
+  applications Application[]
+
+  @@index([email])
+  @@map("users")
+}
+
+// ─── Profile (job-search persona; many per user in v1.1+) ─────────────────────
+
+model Profile {
+  id              String          @id @default(cuid())
+  userId          String
+  profileTitle    String
+  jobTitle        String
+  seniority       SeniorityLevel
+  // Required before running general profile ATS — drives industry-specific keyword criteria.
+  primaryIndustry ProfileIndustry
+  summary         String?         @db.Text
+
+  skills        String[] @default([])
+  jobCategories String[] @default([])
+
+  locationCity    String?
+  locationCountry String? // ISO 3166-1 alpha-2
+
+  contactPhone String?
+
+  salaryMin      Int?
+  salaryMax      Int?
+  salaryCurrency String?       @default("GBP")
+  salaryPeriod   SalaryPeriod? @default(ANNUAL)
+
+  // Reusable screening / autofill answers for employer forms (work authorization,
+  // notice period, sponsorship, etc.). Per-profile — Dev vs Sales may differ.
+  autofillAnswers Json? @default("{}")
+
+  isDefault   Boolean @default(false)
+  currentCvId String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user                 User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  currentCv            CvDocument?           @relation("ProfileCurrentCv", fields: [currentCvId], references: [id], onDelete: SetNull)
+  cvDocuments          CvDocument[]          @relation("ProfileCvs")
+  generalAtsAssessment ProfileAtsAssessment?
+  applications         Application[]
+
+  @@index([userId])
+  @@index([userId, isDefault])
+  @@map("profiles")
+}
+
+// ─── CV (one active per profile via Profile.currentCvId) ─────────────────────
+
+model CvDocument {
+  id            String        @id @default(cuid())
+  profileId     String
+  storageKey    String // Supabase Storage path (bucket: cvs) — not S3
+  fileName      String
+  mimeType      String
+  fileSizeBytes Int
+  parsedText    String?       @db.Text
+  parseStatus   CvParseStatus @default(PENDING)
+  isActive      Boolean       @default(true)
+  uploadedAt    DateTime      @default(now())
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  profile           Profile  @relation("ProfileCvs", fields: [profileId], references: [id], onDelete: Cascade)
+  currentForProfile Profile? @relation("ProfileCurrentCv")
+
+  @@index([profileId])
+  @@index([profileId, isActive])
+  @@map("cv_documents")
+}
+
+// ─── General ATS assessment (one per profile; overwritten on re-run) ─────────
+
+model ProfileAtsAssessment {
+  profileId        String          @id
+  industry         ProfileIndustry // industry criteria used for this run
+  score            Int
+  missingKeywords  Json            @default("[]")
+  suggestions      Json            @default("[]")
+  breakdown        Json            @default("{}")
+  inputFingerprint String?
+  assessedAt       DateTime
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@map("profile_ats_assessments")
+}
+
+// ─── Application (tracker + point-in-time application package) ─────────────
+// Regenerate (AI mode) overwrites ALL snapshots + ApplicationAtsReport together.
+
+model Application {
+  id             String                    @id @default(cuid())
+  userId         String
+  profileId      String
+  status         ApplicationStatus         @default(DRAFT)
+  generationMode ApplicationGenerationMode @default(AI)
+
+  // Optional in MANUAL mode (no ATS key / apply link required).
+  // canonicalJobKey stays unique-per-user when present; multiple NULLs are allowed
+  // by Postgres, so manual entries never collide on the unique constraint below.
+  canonicalJobKey String?
+  applyUrl        String? @db.Text
+
+  // Point-in-time snapshots — populated in AI mode (overwritten on regenerate),
+  // optional/empty for MANUAL entries which rely on the normalized fields below.
+  jobSnapshot     Json?
+  profileSnapshot Json?
+  cvSnapshot      Json?
+  cvStorageKey    String? // application-scoped CV copy in Supabase Storage (bucket: cvs)
+  snapshottedAt   DateTime @default(now())
+
+  // Async AI package generation (BullMQ). Null for MANUAL entries.
+  generationStatus ApplicationGenerationStatus?
+  generationError  String?                      @db.Text
+
+  // MANUAL entries: user-pasted JD text. Fed to AI cover-letter / ATS generation
+  // when a manual entry requests it (sets coverLetterSource = AI; see BACKEND.md).
+  pastedJobDescription String? @db.Text
+
+  // ── Normalized job facts (queryable; AI: parsed from JD, MANUAL: user-entered) ──
+  // Mirrors the legacy spreadsheet tracker so both modes can filter/sort/group.
+  companyName       String? // legacy: Organisation-name
+  jobRoleTitle      String? // legacy: Job-Role
+  jobLocation       String? // legacy: Location
+  jobWebsite        String?       @db.Text // legacy: Website
+  industry          String? // legacy: Industry
+  sourceOfListing   String? // legacy: source-of-listing — how the user found the role ("LinkedIn", "Adzuna", "referral")
+  languageRequired  String[]      @default([]) // legacy: Language-Required
+  jobStartDate      DateTime? // legacy: Start-Date — null = unknown / ASAP
+  jobSalaryMin      Int? // legacy: Salary (parsed)
+  jobSalaryMax      Int?
+  jobSalaryCurrency String? // independent of Profile expectation (e.g. EUR vs GBP)
+  jobSalaryPeriod   SalaryPeriod?
+  jobSalaryRaw      String? // fallback for unparseable / unknown salary ("competitive", "?")
+  userFitRating     Int? // legacy: fit — manual self-rated fit (0–100); AI fit lives in ApplicationAtsReport
+
+  coverLetterContent    String?           @db.Text
+  coverLetterTemplateId String            @default("classic")
+  coverLetterSource     CoverLetterSource @default(AI)
+  coverLetterEdited     Boolean           @default(false)
+
+  appliedAt DateTime?
+
+  rejectionPhase       ApplicationRejectionPhase?
+  rejectedAt           DateTime?
+  contactName          String?
+  interviewScheduledAt DateTime?
+  interviewRound       Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profile   Profile               @relation(fields: [profileId], references: [id], onDelete: Restrict)
+  atsReport ApplicationAtsReport?
+  events    ApplicationEvent[]
+
+  @@unique([userId, canonicalJobKey])
+  @@index([userId])
+  @@index([userId, status])
+  @@index([userId, sourceOfListing])
+  @@index([profileId])
+  @@map("applications")
+}
+
+// ─── Per-application ATS / ICP report (AI mode only; overwritten on regenerate) ─
+
+model ApplicationAtsReport {
+  applicationId    String   @id
+  score            Int
+  letterScore      Int?
+  cvScore          Int?
+  missingKeywords  Json     @default("[]")
+  suggestions      Json     @default("[]")
+  strengths        Json     @default("[]")
+  gaps             Json     @default("[]")
+  actionableSteps  Json     @default("[]")
+  keywordCoverage  Json     @default("{}")
+  icpMatch         Json     @default("{}")
+  breakdown        Json     @default("{}")
+  inputFingerprint String?
+  assessedAt       DateTime
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@map("application_ats_reports")
+}
+
+// ─── Application event log (notes, next steps, interviews, responses) ────────
+
+model ApplicationEvent {
+  id            String               @id @default(cuid())
+  applicationId String
+  eventType     ApplicationEventType
+  occurredAt    DateTime
+  content       String               @db.Text
+  contactName   String?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@index([applicationId, eventType])
+  @@index([applicationId, occurredAt])
+  @@map("application_events")
+}
