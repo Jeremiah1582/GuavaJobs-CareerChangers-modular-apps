@@ -23,8 +23,12 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleDestroy() {
-    if (this.client.status === 'end') return;
-    await this.client.quit();
+    if (this.client.status === 'end' || this.client.status === 'wait') return;
+    try {
+      await this.client.quit();
+    } catch {
+      this.client.disconnect();
+    }
   }
 
   private async ensureConnected(): Promise<void> {

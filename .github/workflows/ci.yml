@@ -51,3 +51,62 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  api-e2e:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: pass
+          POSTGRES_DB: guavajobs_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U user -d guavajobs_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://user:pass@localhost:5432/guavajobs_ci
+      DIRECT_URL: postgresql://user:pass@localhost:5432/guavajobs_ci
+      SUPABASE_URL: https://placeholder.supabase.co
+      SUPABASE_JWKS_URL: https://placeholder.supabase.co/auth/v1/.well-known/jwks.json
+      SUPABASE_SERVICE_ROLE_KEY: placeholder
+      REDIS_URL: redis://localhost:6379
+      # Workers process AI jobs inside the same Nest process during e2e.
+      RUN_BULLMQ_WORKERS: 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: api/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Apply migrations
+        run: npx prisma migrate deploy
+
+      - name: Money-path e2e
+        run: npm run test:e2e -- --testPathPattern='(generate|manual|quota)\\.e2e-spec'

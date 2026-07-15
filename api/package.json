@@ -16,6 +16,7 @@
     "db:studio": "prisma studio",
     "test": "jest",
     "test:e2e": "jest --config ./test/jest-e2e.config.js --runInBand",
+    "test:e2e:money": "REDIS_URL=${E2E_REDIS_URL:-redis://127.0.0.1:6379} jest --config ./test/jest-e2e.config.js --runInBand --testPathPattern='(generate|manual|quota)\\.e2e-spec'",
     "test:smoke": "node scripts/endpoint-smoke-test.mjs",
     "jobs:search": "node scripts/job-search.mjs"
   },
