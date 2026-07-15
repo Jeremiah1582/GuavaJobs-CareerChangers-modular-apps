@@ -1,5 +1,8 @@
-# Local Redis for Phase 0 (job cache / BullMQ).
+# Local dev only — Redis for job cache / BullMQ (npm run dev:infra).
 # Postgres: Supabase (set DATABASE_URL + DIRECT_URL in .env — see .env.example).
+# Production (Coolify/Hetzner) does not use this file — see Dockerfile
+# and docs/DEPLOY.md. Redis in production is a separate Coolify resource
+# (or Upstash), not this compose file.
 services:
   redis:
     image: redis:7-alpine

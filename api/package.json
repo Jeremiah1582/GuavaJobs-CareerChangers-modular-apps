@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "build": "nest build",
+    "dev": "npm run dev:infra && nest start --watch",
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
     "dev:infra": "docker compose up -d redis --remove-orphans",
@@ -51,7 +52,7 @@
     "@types/multer": "^2.2.0",
     "bullmq": "^5.79.2",
     "ioredis": "^5.11.1",
-    "jose": "^6.0.11",
+    "jose": "^5.10.0",
     "mammoth": "^1.12.0",
     "pdf-parse": "^2.4.5",
     "pdfkit": "^0.19.1",

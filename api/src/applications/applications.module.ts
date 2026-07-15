@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AiModule } from '../ai/ai.module';
+import { shouldRunBullmqWorkers } from '../config/workers';
 import { JobsModule } from '../jobs/jobs.module';
 import { PdfModule } from '../pdf/pdf.module';
 import { AiGenerationProcessor } from '../queue/ai-generation.processor';
@@ -15,6 +16,8 @@ import { ApplicationsController } from './applications.controller';
 import { ApplicationsService } from './applications.service';
 import { IdempotencyService } from './idempotency.service';
 
+const workerProviders = shouldRunBullmqWorkers() ? [AiGenerationProcessor] : [];
+
 @Module({
   imports: [QueueModule, AiModule, JobsModule, UsersModule, PdfModule],
   controllers: [ApplicationsController, ApplicationEventsController],
@@ -25,7 +28,7 @@ import { IdempotencyService } from './idempotency.service';
     ApplicationEventsService,
     ApplicationSnapshotService,
     ApplicationAiWorkerService,
-    AiGenerationProcessor,
+    ...workerProviders,
     IdempotencyService,
   ],
   exports: [ApplicationsService],

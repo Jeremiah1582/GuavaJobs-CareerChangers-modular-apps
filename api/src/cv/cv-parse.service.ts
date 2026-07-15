@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import mammoth from 'mammoth';
-import { PDFParse } from 'pdf-parse';
 
 const MAX_EXTRACT_CHARS = 120_000;
 
@@ -47,6 +46,7 @@ export class CvParseService {
   }
 
   private async parsePdf(buffer: Buffer): Promise<string> {
+    const { PDFParse } = await import('pdf-parse');
     const parser = new PDFParse({ data: buffer });
     try {
       const result = await parser.getText();

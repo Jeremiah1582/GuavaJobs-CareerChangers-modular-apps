@@ -2,11 +2,13 @@ import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EnvConfig } from '../config/env.validation';
+import { shouldRunBullmqWorkers } from '../config/workers';
 import { CvParseService } from '../cv/cv-parse.service';
 import { StorageService } from '../cv/storage.service';
-import { AiGenerationProcessor } from './ai-generation.processor';
 import { CvParseProcessor } from './cv-parse.processor';
 import { AI_GENERATION_QUEUE, CV_PARSE_QUEUE } from './queue.constants';
+
+const workerProviders = shouldRunBullmqWorkers() ? [CvParseProcessor] : [];
 
 @Module({
   imports: [
@@ -23,7 +25,7 @@ import { AI_GENERATION_QUEUE, CV_PARSE_QUEUE } from './queue.constants';
       { name: AI_GENERATION_QUEUE },
     ),
   ],
-  providers: [CvParseProcessor, CvParseService, StorageService],
+  providers: [...workerProviders, CvParseService, StorageService],
   exports: [BullModule, StorageService, CvParseService],
 })
 export class QueueModule {}

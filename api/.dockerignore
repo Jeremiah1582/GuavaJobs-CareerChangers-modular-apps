@@ -1,0 +1,12 @@
+node_modules
+dist
+.env
+.env.local
+.env.example
+.git
+.gitignore
+*.log
+coverage
+test
+docker-compose.yml
+public
