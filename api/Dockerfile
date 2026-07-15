@@ -3,6 +3,10 @@
 # Single container runs the HTTP API and BullMQ processors together
 # (see src/config/workers.ts). No serverless adapter — this is a
 # long-running Node process, matched to Coolify's deploy model.
+#
+# Coolify often injects NODE_ENV=production as a build-time ARG. That makes
+# `npm ci` skip devDependencies (@nestjs/cli, prisma CLI, typescript), which
+# breaks `nest build`. Force including devDependencies during the builder stage.
 
 FROM node:20-slim AS builder
 WORKDIR /app
@@ -14,13 +18,15 @@ RUN apt-get update -y \
   && rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json ./
-RUN npm ci
+# --include=dev overrides NODE_ENV=production from Coolify build-time args
+RUN npm ci --include=dev
 
 COPY prisma ./prisma
 RUN npx prisma generate
 
 COPY . .
-RUN npm run build
+RUN npm run build \
+  && npm prune --omit=dev
 
 FROM node:20-slim AS runner
 WORKDIR /app
