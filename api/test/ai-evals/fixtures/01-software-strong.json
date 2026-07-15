@@ -1,0 +1,18 @@
+{
+  "id": "software-strong",
+  "industry": "SOFTWARE",
+  "profile": {
+    "jobTitle": "Backend Engineer",
+    "summary": "TypeScript/NestJS engineer with API and Postgres experience.",
+    "skills": ["TypeScript", "NestJS", "PostgreSQL", "Redis"]
+  },
+  "jobTitle": "Senior Backend Engineer",
+  "companyName": "Northwind Labs",
+  "jobDescription": "Northwind Labs needs a Senior Backend Engineer to design NestJS APIs, model PostgreSQL schemas, and use Redis for caching. You will own service reliability and mentoring. TypeScript is required; Kubernetes is nice to have.",
+  "cvText": "Alex Rivera\nBackend Engineer\n\nExperience:\n- Built NestJS APIs at Contoso Systems (2021-2025)\n- Designed PostgreSQL schemas and Redis caching layers\n- Mentored two junior engineers\n\nSkills: TypeScript, NestJS, PostgreSQL, Redis, Docker\nEducation: BSc Computer Science, State University",
+  "forbiddenEmployers": ["Google", "Meta", "Stripe", "Amazon"],
+  "forbiddenDegrees": ["PhD Artificial Intelligence", "MBA Harvard", "MSc Machine Learning"],
+  "baselineCoverLetter": "Dear Hiring Manager,\n\nI am applying for the Senior Backend Engineer role at Northwind Labs. At Contoso Systems I built NestJS APIs in TypeScript, designed PostgreSQL schemas, and introduced Redis caching. I have also mentored junior engineers and care about reliable services.\n\nI would welcome the chance to bring that experience to your team.\n\nSincerely,\nAlex Rivera",
+  "atsScoreMin": 60,
+  "atsScoreMax": 100
+}

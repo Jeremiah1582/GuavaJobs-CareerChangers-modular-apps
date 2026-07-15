@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   EnvConfig,
@@ -13,13 +13,24 @@ type ChatCompletionResponse = {
   choices?: Array<{
     message?: { content?: string | null };
   }>;
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+  };
 };
 
 @Injectable()
 export class LlmClient {
+  private readonly logger = new Logger(LlmClient.name);
+
   constructor(private readonly config: ConfigService<EnvConfig, true>) {}
 
-  async chatJson(systemPrompt: string, userPrompt: string): Promise<string> {
+  async chatJson(
+    systemPrompt: string,
+    userPrompt: string,
+    purpose = 'unknown',
+  ): Promise<string> {
     const env = {
       OPENAI_API_KEY: this.config.get('OPENAI_API_KEY', { infer: true }),
       OPENROUTER_API_KEY: this.config.get('OPENROUTER_API_KEY', { infer: true }),
@@ -38,6 +49,7 @@ export class LlmClient {
 
     const baseUrl = getLlmBaseUrl(env as EnvConfig);
     const model = getLlmModel(env as EnvConfig);
+    const started = Date.now();
 
     const headers: Record<string, string> = {
       Authorization: `Bearer ${apiKey}`,
@@ -80,6 +92,17 @@ export class LlmClient {
     if (!content) {
       throw new AppError('AI_EMPTY_RESPONSE', 'LLM returned empty content', 502);
     }
+
+    // BUSINESS_PLAN R9 — token-usage line per LLM call
+    this.logger.log(
+      JSON.stringify({
+        model,
+        promptTokens: data.usage?.prompt_tokens ?? null,
+        completionTokens: data.usage?.completion_tokens ?? null,
+        ms: Date.now() - started,
+        purpose,
+      }),
+    );
 
     return content;
   }

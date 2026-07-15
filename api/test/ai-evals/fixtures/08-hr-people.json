@@ -1,0 +1,18 @@
+{
+  "id": "hr-people",
+  "industry": "HR",
+  "profile": {
+    "jobTitle": "People Operations Generalist",
+    "summary": "HR generalist covering onboarding, employee relations, and HRIS.",
+    "skills": ["Onboarding", "Employee relations", "BambooHR", "Policy drafting"]
+  },
+  "jobTitle": "People Operations Partner",
+  "companyName": "Summit Robotics",
+  "jobDescription": "Summit Robotics needs a People Operations Partner to run onboarding, handle employee relations cases, maintain BambooHR, and draft practical people policies for a growing hardware team.",
+  "cvText": "Taylor Mensah\nPeople Operations Generalist\n\nExperience:\n- People Ops at Driftwood Design (2019-2025)\n- Ran end-to-end onboarding for ~80 hires\n- Handled employee relations cases with managers\n- Administered BambooHR and drafted leave policy updates\n\nSkills: onboarding, employee relations, BambooHR, policy drafting\nEducation: BA Psychology, Southridge University; CIPD Level 5",
+  "forbiddenEmployers": ["Google People Ops", "Meta HR", "Workday", "LinkedIn"],
+  "forbiddenDegrees": ["MSc Organisational Psychology", "MBA HR Strategy"],
+  "baselineCoverLetter": "Dear Hiring Manager,\n\nI am applying for the People Operations Partner role at Summit Robotics. At Driftwood Design I ran onboarding for dozens of hires, supported employee relations, administered BambooHR, and drafted leave policy updates.\n\nI would welcome supporting your growing hardware team with the same practical ops focus.\n\nSincerely,\nTaylor Mensah",
+  "atsScoreMin": 50,
+  "atsScoreMax": 100
+}

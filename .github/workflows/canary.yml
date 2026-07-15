@@ -1,0 +1,27 @@
+name: Canary
+
+on:
+  schedule:
+    # Daily 06:15 UTC
+    - cron: '15 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    env:
+      # Optional overrides via repo Variables; script has production defaults.
+      CANARY_HEALTH_URL: ${{ vars.CANARY_HEALTH_URL }}
+      CANARY_ATS_URL: ${{ vars.CANARY_ATS_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run canary
+        run: node scripts/canary.mjs

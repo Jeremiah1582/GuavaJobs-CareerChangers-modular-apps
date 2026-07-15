@@ -45,7 +45,7 @@ export class AtsReportGenerator {
       2,
     );
 
-    const raw = await this.llm.chatJson(SYSTEM_PROMPT, userPrompt);
+    const raw = await this.llm.chatJson(SYSTEM_PROMPT, userPrompt, 'ats-report');
     if (!raw?.trim()) {
       throw new Error('Empty LLM response for ATS report');
     }
@@ -62,6 +62,9 @@ export class AtsReportGenerator {
 function normalizeAtsOutput(raw: Record<string, unknown>): Record<string, unknown> {
   return {
     ...raw,
+    score: toIntScore(raw.score),
+    letterScore: raw.letterScore === undefined ? undefined : toIntScore(raw.letterScore),
+    cvScore: raw.cvScore === undefined ? undefined : toIntScore(raw.cvScore),
     missingKeywords: toStringArray(raw.missingKeywords),
     suggestions: toStringArray(raw.suggestions),
     strengths: toStringArray(raw.strengths),
@@ -71,6 +74,18 @@ function normalizeAtsOutput(raw: Record<string, unknown>): Record<string, unknow
     icpMatch: toObject(raw.icpMatch),
     breakdown: toNumberRecord(raw.breakdown),
   };
+}
+
+function toIntScore(value: unknown): number {
+  let num = Number(value);
+  if (Number.isNaN(num)) {
+    return Number.NaN;
+  }
+  // Some models return 0–1 fractions instead of 0–100 integers.
+  if (num > 0 && num <= 1) {
+    num *= 100;
+  }
+  return Math.round(Math.min(100, Math.max(0, num)));
 }
 
 function toStringArray(value: unknown): string[] {

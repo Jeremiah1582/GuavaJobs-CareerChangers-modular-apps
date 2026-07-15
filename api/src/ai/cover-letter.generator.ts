@@ -42,7 +42,7 @@ export class CoverLetterGenerator {
       2,
     );
 
-    const raw = await this.llm.chatJson(SYSTEM_PROMPT, userPrompt);
+    const raw = await this.llm.chatJson(SYSTEM_PROMPT, userPrompt, 'cover-letter');
     if (!raw?.trim()) {
       throw new Error('Empty LLM response for cover letter');
     }

@@ -1,0 +1,18 @@
+{
+  "id": "marketing-content",
+  "industry": "MARKETING",
+  "profile": {
+    "jobTitle": "Content Marketing Manager",
+    "summary": "B2B content marketer with SEO, newsletters, and case studies.",
+    "skills": ["SEO", "Content strategy", "HubSpot", "Copywriting"]
+  },
+  "jobTitle": "Content Marketing Lead",
+  "companyName": "Stackline Tools",
+  "jobDescription": "Stackline Tools wants a Content Marketing Lead to own SEO strategy, ship weekly newsletter content, and produce customer case studies. HubSpot experience and clear B2B copywriting required.",
+  "cvText": "Casey Nguyen\nContent Marketing Manager\n\nExperience:\n- Content Manager at Orbit CRM (2020-2025)\n- Grew organic traffic via SEO briefs and blog cadence\n- Wrote customer case studies and a biweekly product newsletter\n- Administered HubSpot CMS and email journeys\n\nSkills: SEO, content strategy, HubSpot, copywriting, analytics\nEducation: BA English, Harbor University",
+  "forbiddenEmployers": ["Google Marketing", "Nike", "Coca-Cola", "Notion"],
+  "forbiddenDegrees": ["MSc Digital Marketing", "MBA Kellogg"],
+  "baselineCoverLetter": "Dear Hiring Manager,\n\nI am applying for the Content Marketing Lead role at Stackline Tools. At Orbit CRM I owned SEO briefs, blog cadence, customer case studies, and a biweekly newsletter, working daily in HubSpot.\n\nI would like to bring that B2B content discipline to your growth engine.\n\nSincerely,\nCasey Nguyen",
+  "atsScoreMin": 50,
+  "atsScoreMax": 100
+}

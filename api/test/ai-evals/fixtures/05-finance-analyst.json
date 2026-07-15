@@ -1,0 +1,18 @@
+{
+  "id": "finance-analyst",
+  "industry": "FINANCE",
+  "profile": {
+    "jobTitle": "Financial Analyst",
+    "summary": "FP&A analyst with forecasting, variance analysis, and Excel modelling.",
+    "skills": ["Excel", "FP&A", "Forecasting", "Variance analysis"]
+  },
+  "jobTitle": "FP&A Analyst",
+  "companyName": "Cedar Health Group",
+  "jobDescription": "Cedar Health Group is hiring an FP&A Analyst for monthly forecasting, variance analysis, and Excel models that support leadership. Experience in healthcare or services finance preferred.",
+  "cvText": "Morgan Lee\nFinancial Analyst\n\nExperience:\n- FP&A Analyst at GreenField Clinics (2021-2025)\n- Owned monthly forecast and variance packs for clinic ops\n- Built Excel driver-based models for headcount and revenue\n\nSkills: Excel, FP&A, forecasting, variance analysis, PowerPoint\nEducation: BSc Accounting, Lakeside University; ACCA Part-Qualified",
+  "forbiddenEmployers": ["Goldman Sachs", "JPMorgan", "Deloitte", "BlackRock"],
+  "forbiddenDegrees": ["CFA Charterholder", "MBA London Business School"],
+  "baselineCoverLetter": "Dear Hiring Manager,\n\nI am applying for the FP&A Analyst role at Cedar Health Group. At GreenField Clinics I owned monthly forecasts and variance analysis and built Excel driver-based models for revenue and headcount.\n\nHealthcare FP&A is familiar territory for me and I would welcome the chance to support your leadership pack.\n\nSincerely,\nMorgan Lee",
+  "atsScoreMin": 55,
+  "atsScoreMax": 100
+}

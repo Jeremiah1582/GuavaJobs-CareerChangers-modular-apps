@@ -1,0 +1,18 @@
+{
+  "id": "software-career-change",
+  "industry": "SOFTWARE",
+  "profile": {
+    "jobTitle": "Junior Software Developer",
+    "summary": "Former teacher transitioning into software via a bootcamp and freelance work.",
+    "skills": ["JavaScript", "React", "HTML", "CSS"]
+  },
+  "jobTitle": "Junior Frontend Developer",
+  "companyName": "Brightleaf Apps",
+  "jobDescription": "Brightleaf Apps is hiring a Junior Frontend Developer. You will build React components, collaborate with designers, and ship accessible UI. JavaScript and CSS fundamentals required; prior teaching or mentoring experience is a plus.",
+  "cvText": "Sam Okonkwo\nJunior Software Developer\n\nExperience:\n- Secondary school maths teacher at Riverside College (2018-2023)\n- Completed CodeCraft bootcamp (2023)\n- Freelance React landing pages for two local shops\n\nSkills: JavaScript, React, HTML, CSS, Git\nEducation: BA Mathematics, City College; CodeCraft Full-Stack Certificate",
+  "forbiddenEmployers": ["Facebook", "Apple", "Netflix", "Uber"],
+  "forbiddenDegrees": ["PhD Computer Science", "MSc Software Engineering"],
+  "baselineCoverLetter": "Dear Hiring Manager,\n\nI am excited about the Junior Frontend Developer role at Brightleaf Apps. After teaching maths at Riverside College I completed the CodeCraft bootcamp and built freelance React landing pages. I bring clear communication from teaching plus hands-on JavaScript, React, HTML, and CSS.\n\nThank you for considering my application.\n\nSincerely,\nSam Okonkwo",
+  "atsScoreMin": 45,
+  "atsScoreMax": 95
+}

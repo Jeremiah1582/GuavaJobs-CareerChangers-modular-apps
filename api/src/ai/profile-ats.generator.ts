@@ -78,7 +78,7 @@ export class ProfileAtsGenerator {
       2,
     );
 
-    const raw = await this.llm.chatJson(SYSTEM_PROMPT, userPrompt);
+    const raw = await this.llm.chatJson(SYSTEM_PROMPT, userPrompt, 'profile-ats');
     let parsed: unknown;
     try {
       parsed = JSON.parse(raw);

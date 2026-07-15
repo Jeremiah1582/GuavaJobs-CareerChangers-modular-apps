@@ -1,0 +1,18 @@
+{
+  "id": "sales-ae",
+  "industry": "SALES",
+  "profile": {
+    "jobTitle": "Account Executive",
+    "summary": "B2B SaaS AE with outbound and enterprise pipeline experience.",
+    "skills": ["Outbound prospecting", "Salesforce", "Discovery calls", "Negotiation"]
+  },
+  "jobTitle": "Enterprise Account Executive",
+  "companyName": "PulseMetrics",
+  "jobDescription": "PulseMetrics seeks an Enterprise Account Executive to run outbound, manage Salesforce pipeline, run discovery, and close mid-market deals. Quota ownership and crisp negotiation skills required.",
+  "cvText": "Jordan Blake\nAccount Executive\n\nExperience:\n- AE at CloudNest SaaS (2020-2025), 120% of quota in 2024\n- Built outbound sequences and ran discovery calls\n- Managed full Salesforce pipeline for 40 accounts\n\nSkills: Salesforce, outbound prospecting, negotiation, MEDDIC basics\nEducation: BSc Business Administration, Westbrook University",
+  "forbiddenEmployers": ["Salesforce Inc", "HubSpot", "Oracle", "SAP"],
+  "forbiddenDegrees": ["MBA Wharton", "PhD Economics"],
+  "baselineCoverLetter": "Dear Hiring Manager,\n\nI am applying for the Enterprise Account Executive role at PulseMetrics. At CloudNest SaaS I owned quota, ran outbound and discovery, and managed Salesforce pipeline for dozens of accounts, finishing 2024 at 120% of quota.\n\nI would like to bring that disciplined enterprise selling approach to your team.\n\nSincerely,\nJordan Blake",
+  "atsScoreMin": 55,
+  "atsScoreMax": 100
+}

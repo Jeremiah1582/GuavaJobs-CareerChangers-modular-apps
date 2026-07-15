@@ -1,0 +1,18 @@
+{
+  "id": "operations-weak-fit",
+  "industry": "OPERATIONS",
+  "profile": {
+    "jobTitle": "Operations Coordinator",
+    "summary": "Coordinator with inventory and vendor scheduling experience in retail.",
+    "skills": ["Inventory", "Vendor scheduling", "Excel", "Shift planning"]
+  },
+  "jobTitle": "Supply Chain Manager — Aerospace",
+  "companyName": "AeroForge Dynamics",
+  "jobDescription": "AeroForge Dynamics requires a Supply Chain Manager with aerospace supplier qualification, AS9100 familiarity, multi-tier BOM planning, and ERP (SAP) ownership for regulated manufacturing. Prior aerospace or defence experience is essential.",
+  "cvText": "Chris Patel\nOperations Coordinator\n\nExperience:\n- Ops Coordinator at CityMart Retail (2018-2025)\n- Tracked store inventory and coordinated weekly vendor deliveries\n- Built Excel shift plans for 25 retail staff\n\nSkills: inventory tracking, vendor scheduling, Excel, shift planning\nEducation: BA Business Studies, Community College",
+  "forbiddenEmployers": ["Boeing", "Lockheed Martin", "Airbus", "SpaceX"],
+  "forbiddenDegrees": ["MSc Supply Chain", "MBA Operations Research"],
+  "baselineCoverLetter": "Dear Hiring Manager,\n\nI am writing about the Supply Chain Manager role at AeroForge Dynamics. My background is as an Operations Coordinator at CityMart Retail, where I tracked inventory, scheduled vendors, and planned shifts in Excel. I do not have aerospace, AS9100, or SAP experience, but I am organised and eager to learn structured operations work.\n\nThank you for considering my application.\n\nSincerely,\nChris Patel",
+  "atsScoreMin": 5,
+  "atsScoreMax": 55
+}

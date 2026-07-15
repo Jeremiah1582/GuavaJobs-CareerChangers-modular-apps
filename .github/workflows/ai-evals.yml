@@ -1,0 +1,50 @@
+name: AI Evals
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: Optional model override (OPENAI_MODEL / OpenRouter model id)
+        required: false
+        type: string
+
+jobs:
+  ai-evals:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    env:
+      NODE_ENV: test
+      RUN_AI_EVALS: 'true'
+      # Prefer OpenRouter secret; fall back to OPENAI_API_KEY naming used in Coolify.
+      OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY || secrets.OPENAI_API_KEY }}
+      OPENAI_MODEL: ${{ inputs.model || 'deepseek/deepseek-chat' }}
+      # Prefer a non-reasoning chat model for eval latency; override via workflow input.
+      DATABASE_URL: postgresql://user:pass@localhost:5432/guavajobs_ci
+      DIRECT_URL: postgresql://user:pass@localhost:5432/guavajobs_ci
+      SUPABASE_URL: https://placeholder.supabase.co
+      SUPABASE_JWKS_URL: https://placeholder.supabase.co/auth/v1/.well-known/jwks.json
+      SUPABASE_SERVICE_ROLE_KEY: placeholder
+      REDIS_URL: redis://localhost:6379
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: api/package-lock.json
+
+      - name: Require LLM API key secret
+        run: |
+          if [ -z "$OPENAI_API_KEY" ]; then
+            echo "Set repo secret OPENROUTER_API_KEY or OPENAI_API_KEY before running AI evals." >&2
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run AI eval harness
+        run: npm run test:ai-evals

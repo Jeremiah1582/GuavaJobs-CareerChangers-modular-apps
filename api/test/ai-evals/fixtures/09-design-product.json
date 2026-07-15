@@ -1,0 +1,18 @@
+{
+  "id": "design-product",
+  "industry": "DESIGN",
+  "profile": {
+    "jobTitle": "Product Designer",
+    "summary": "Product designer focused on B2B UX, Figma systems, and usability tests.",
+    "skills": ["Figma", "Design systems", "User research", "Prototyping"]
+  },
+  "jobTitle": "Product Designer",
+  "companyName": "CanvasPay",
+  "jobDescription": "CanvasPay is hiring a Product Designer to evolve our Figma design system, run usability tests, and ship B2B payment UX with engineers. Strong prototyping and research synthesis required.",
+  "cvText": "Avery Kim\nProduct Designer\n\nExperience:\n- Product Designer at PayNest (2020-2025)\n- Maintained a Figma component library used by three squads\n- Ran usability tests on checkout and payouts flows\n- Partnered with engineers on accessible B2B payment UX\n\nSkills: Figma, design systems, user research, prototyping, accessibility\nEducation: BA Graphic Design, Art & Tech College",
+  "forbiddenEmployers": ["Apple Design", "IDEO", "Airbnb Design", "Figma Inc"],
+  "forbiddenDegrees": ["MFA Interaction Design", "PhD Human Factors"],
+  "baselineCoverLetter": "Dear Hiring Manager,\n\nI am applying for the Product Designer role at CanvasPay. At PayNest I maintained a Figma design system, ran usability tests on checkout and payouts, and partnered with engineers on accessible B2B payment UX.\n\nI would like to bring that systems-minded design craft to CanvasPay.\n\nSincerely,\nAvery Kim",
+  "atsScoreMin": 55,
+  "atsScoreMax": 100
+}

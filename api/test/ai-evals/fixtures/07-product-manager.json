@@ -1,0 +1,18 @@
+{
+  "id": "product-manager",
+  "industry": "PRODUCT",
+  "profile": {
+    "jobTitle": "Product Manager",
+    "summary": "PM for B2B workflows with roadmaps, discovery, and delivery.",
+    "skills": ["Roadmapping", "User interviews", "Jira", "PRDs"]
+  },
+  "jobTitle": "Product Manager — Workflows",
+  "companyName": "LedgerFlow",
+  "jobDescription": "LedgerFlow is hiring a Product Manager for workflow products. You will run user interviews, write PRDs, manage Jira delivery with engineering, and sequence a clear roadmap for mid-market customers.",
+  "cvText": "Riley Cho\nProduct Manager\n\nExperience:\n- PM at InvoiceKit (2021-2025) for AP automation workflows\n- Ran continuous user interviews with finance operators\n- Wrote PRDs and managed Jira sprints with a squad of five\n- Owned roadmap trade-offs for mid-market accounts\n\nSkills: roadmapping, user interviews, Jira, PRDs, analytics basics\nEducation: BSc Information Systems, Metro Tech",
+  "forbiddenEmployers": ["Atlassian", "Slack", "Microsoft", "Shopify"],
+  "forbiddenDegrees": ["MBA INSEAD", "PhD HCI"],
+  "baselineCoverLetter": "Dear Hiring Manager,\n\nI am interested in the Product Manager — Workflows role at LedgerFlow. At InvoiceKit I ran user interviews, wrote PRDs, managed Jira delivery with engineering, and owned roadmap trade-offs for mid-market AP automation.\n\nI would be glad to apply that workflow PM craft to your product.\n\nSincerely,\nRiley Cho",
+  "atsScoreMin": 55,
+  "atsScoreMax": 100
+}

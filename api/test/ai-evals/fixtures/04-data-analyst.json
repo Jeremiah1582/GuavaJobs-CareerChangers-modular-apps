@@ -1,0 +1,18 @@
+{
+  "id": "data-analyst",
+  "industry": "DATA_ANALYSIS",
+  "profile": {
+    "jobTitle": "Data Analyst",
+    "summary": "Analyst focused on SQL, dashboards, and stakeholder storytelling.",
+    "skills": ["SQL", "Python", "Tableau", "A/B testing"]
+  },
+  "jobTitle": "Product Data Analyst",
+  "companyName": "Harbor Retail",
+  "jobDescription": "Harbor Retail needs a Product Data Analyst to write SQL, build Tableau dashboards, run A/B analyses, and partner with product managers. Python for data wrangling is expected.",
+  "cvText": "Priya Shah\nData Analyst\n\nExperience:\n- Data Analyst at MarketBasket Co (2019-2025)\n- Built Tableau dashboards for merchandising KPIs\n- Wrote complex SQL and light Python ETL scripts\n- Supported three A/B tests on checkout UX\n\nSkills: SQL, Python, Tableau, statistics basics\nEducation: MSc Statistics, Northern Institute",
+  "forbiddenEmployers": ["McKinsey", "Airbnb", "Spotify", "Palantir"],
+  "forbiddenDegrees": ["PhD Statistics", "MBA Stanford"],
+  "baselineCoverLetter": "Dear Hiring Manager,\n\nI am interested in the Product Data Analyst role at Harbor Retail. At MarketBasket Co I wrote SQL, built Tableau dashboards, used Python for wrangling, and supported A/B tests on checkout UX with product partners.\n\nI would be glad to apply the same analytical rigor to your product questions.\n\nSincerely,\nPriya Shah",
+  "atsScoreMin": 55,
+  "atsScoreMax": 100
+}
