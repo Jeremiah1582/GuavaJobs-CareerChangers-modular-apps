@@ -15,6 +15,11 @@ import type {
   ProfileResponse,
 } from "@/api/types";
 import { AnalyticsEvents, track } from "@/lib/analytics";
+import { AppPageShell } from "@/components/app/app-page-shell";
+import {
+  PaperPanel,
+  paperInputClass,
+} from "@/components/ui/paper-panel";
 import {
   INDUSTRY_LABELS,
   PROFILE_INDUSTRIES,
@@ -25,6 +30,8 @@ import {
 } from "@/lib/onboarding";
 import { createClient } from "@/lib/supabase/client";
 
+const saveButtonClass =
+  "rounded-xl bg-gradient-to-br from-[oklch(0.68_0.13_150)] via-[oklch(0.58_0.16_150)] to-[oklch(0.48_0.13_155)] px-4 py-2 text-sm font-medium text-white shadow-[0_12px_32px_-12px_color-mix(in_oklab,var(--guava-green)_70%,transparent)] transition-[filter,transform] hover:brightness-[1.05] active:scale-[0.98] disabled:opacity-60";
 const ACCEPT =
   ".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -330,103 +337,95 @@ export function ProfileEditor() {
 
   if (loading) {
     return (
-      <main className="mx-auto max-w-3xl px-4 py-12">
-        <h1 className="text-2xl font-semibold tracking-tight">Profile</h1>
+      <AppPageShell
+        title="Profile"
+        description="Edit your account, target role, and active CV."
+      >
         <Skeleton />
-      </main>
+      </AppPageShell>
     );
   }
 
   if (loadError && !me) {
     return (
-      <main className="mx-auto max-w-3xl px-4 py-12">
-        <h1 className="text-2xl font-semibold tracking-tight">Profile</h1>
-        <p className="mt-6 text-sm text-destructive" role="alert">
+      <AppPageShell title="Profile">
+        <p className="text-sm text-destructive" role="alert">
           {loadError}. Check that the API is reachable and CORS is deployed.
         </p>
-      </main>
+      </AppPageShell>
     );
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-12">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Profile</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Edit your account, target role, and active CV.
-          </p>
-        </div>
-        {me ? (
+    <AppPageShell
+      title="Profile"
+      description="Edit your account, target role, and active CV."
+      badge={
+        me ? (
           <QuotaChip
             used={me.usage.aiGenerationsUsedPeriod}
             limit={me.usage.aiGenerationsLimit}
           />
-        ) : null}
-      </div>
-
+        ) : null
+      }
+    >
       {loadError ? (
-        <p className="mt-4 text-sm text-destructive" role="alert">
+        <p className="text-sm text-destructive" role="alert">
           {loadError}
         </p>
       ) : null}
 
-      {/* Account */}
-      <form
-        onSubmit={saveAccount}
-        className="mt-10 space-y-4 rounded-lg border border-border bg-card p-5"
-      >
-        <h2 className="text-base font-semibold tracking-tight">Account</h2>
-        <div className="flex flex-col gap-2">
-          <label htmlFor="name" className="text-sm font-medium">
-            Display name
-          </label>
-          <input
-            id="name"
-            name="name"
-            autoComplete="name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none ring-guava-pink focus:ring-2"
-          />
-          <p className="text-xs text-muted-foreground">
-            Shown on your account. Not a job title.
-          </p>
-        </div>
-        <div className="flex flex-col gap-1">
-          <span className="text-sm font-medium">Email</span>
-          <span className="font-mono text-sm text-muted-foreground">
-            {me?.email}
-          </span>
-        </div>
-        {accountError ? (
-          <p className="text-sm text-destructive" role="alert">
-            {accountError}
-          </p>
-        ) : null}
-        {accountMsg ? (
-          <p className="text-sm text-guava-green" role="status">
-            {accountMsg}
-          </p>
-        ) : null}
-        <button
-          type="submit"
-          disabled={accountPending}
-          className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-60"
-        >
-          {accountPending ? "Saving…" : "Save account"}
-        </button>
+      <form onSubmit={saveAccount} className="space-y-4">
+        <PaperPanel className="space-y-4 border-guava-pink/15 p-5 md:p-6">
+          <h2 className="text-base font-semibold tracking-tight">Account</h2>
+          <div className="flex flex-col gap-2">
+            <label htmlFor="name" className="text-sm font-medium">
+              Display name
+            </label>
+            <input
+              id="name"
+              name="name"
+              autoComplete="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className={paperInputClass}
+            />
+            <p className="text-xs text-muted-foreground">
+              Shown on your account. Not a job title.
+            </p>
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-sm font-medium">Email</span>
+            <span className="font-mono text-sm text-muted-foreground">
+              {me?.email}
+            </span>
+          </div>
+          {accountError ? (
+            <p className="text-sm text-destructive" role="alert">
+              {accountError}
+            </p>
+          ) : null}
+          {accountMsg ? (
+            <p className="text-sm text-guava-green" role="status">
+              {accountMsg}
+            </p>
+          ) : null}
+          <button
+            type="submit"
+            disabled={accountPending}
+            className={saveButtonClass}
+          >
+            {accountPending ? "Saving…" : "Save account"}
+          </button>
+        </PaperPanel>
       </form>
 
-      {/* Role */}
       {profile ? (
-        <form
-          onSubmit={saveRole}
-          className="mt-6 space-y-4 rounded-lg border border-border bg-card p-5"
-        >
-          <h2 className="text-base font-semibold tracking-tight">
-            Target role
-          </h2>
+        <form onSubmit={saveRole} className="mt-6 space-y-4">
+          <PaperPanel className="space-y-4 border-guava-green/20 p-5 md:p-6">
+            <h2 className="text-base font-semibold tracking-tight">
+              Target role
+            </h2>
 
           <fieldset className="flex flex-col gap-2">
             <legend className="text-sm font-medium">Primary industry</legend>
@@ -461,7 +460,7 @@ export function ProfileEditor() {
               name="jobTitle"
               value={jobTitle}
               onChange={(e) => setJobTitle(e.target.value)}
-              className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none ring-guava-pink focus:ring-2"
+              className={paperInputClass}
             />
           </div>
 
@@ -477,7 +476,7 @@ export function ProfileEditor() {
               name="profileTitle"
               value={profileTitle}
               onChange={(e) => setProfileTitle(e.target.value)}
-              className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none ring-guava-pink focus:ring-2"
+              className={paperInputClass}
             />
           </div>
 
@@ -518,7 +517,7 @@ export function ProfileEditor() {
                 name="locationCity"
                 value={locationCity}
                 onChange={(e) => setLocationCity(e.target.value)}
-                className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none ring-guava-pink focus:ring-2"
+                className={paperInputClass}
               />
             </div>
             <div className="flex flex-col gap-2">
@@ -534,7 +533,7 @@ export function ProfileEditor() {
                 maxLength={2}
                 value={locationCountry}
                 onChange={(e) => setLocationCountry(e.target.value)}
-                className="rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm uppercase outline-none ring-guava-pink focus:ring-2"
+                className={`${paperInputClass} font-mono uppercase`}
               />
             </div>
           </div>
@@ -552,16 +551,16 @@ export function ProfileEditor() {
           <button
             type="submit"
             disabled={rolePending}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-60"
+            className={saveButtonClass}
           >
             {rolePending ? "Saving…" : "Save role"}
           </button>
+          </PaperPanel>
         </form>
       ) : null}
 
-      {/* CV */}
       {profile ? (
-        <section className="mt-6 space-y-4 rounded-lg border border-border bg-card p-5">
+        <PaperPanel className="mt-6 space-y-4 border-guava-pink/15 p-5 md:p-6">
           <h2 className="text-base font-semibold tracking-tight">Active CV</h2>
           <p className="text-sm text-muted-foreground">
             One active CV per profile. Replace it anytime with a PDF or DOCX
@@ -623,7 +622,7 @@ export function ProfileEditor() {
               type="button"
               disabled={cvPending}
               onClick={() => inputRef.current?.click()}
-              className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:border-guava-pink/40 disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-xl border border-guava-pink/25 bg-white/80 px-4 py-2 text-sm font-medium transition-colors hover:border-guava-pink/45 disabled:opacity-60"
             >
               <FileArrowUp className="size-4 text-guava-pink" weight="regular" />
               {cvPending
@@ -654,8 +653,8 @@ export function ProfileEditor() {
               </p>
             </div>
           ) : null}
-        </section>
+        </PaperPanel>
       ) : null}
-    </main>
+    </AppPageShell>
   );
 }

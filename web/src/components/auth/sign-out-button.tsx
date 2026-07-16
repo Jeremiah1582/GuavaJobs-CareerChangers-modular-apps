@@ -19,7 +19,7 @@ export function SignOutButton() {
     <button
       type="button"
       onClick={onSignOut}
-      className="text-sm text-muted-foreground transition-opacity hover:opacity-80"
+      className="rounded-full px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
     >
       Sign out
     </button>

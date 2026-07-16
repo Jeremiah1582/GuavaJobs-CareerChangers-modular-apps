@@ -6,6 +6,7 @@ import { FormEvent, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { apiFetch, ApiError } from "@/api/client";
 import { AnalyticsEvents, track } from "@/lib/analytics";
+import { paperInputClass } from "@/components/ui/paper-panel";
 
 type Mode = "sign-in" | "sign-up" | "forgot-password";
 
@@ -28,6 +29,9 @@ function authErrorMessage(err: unknown): string {
   }
   return msg;
 }
+
+const submitClass =
+  "w-full rounded-xl bg-gradient-to-br from-[oklch(0.68_0.13_150)] via-[oklch(0.58_0.16_150)] to-[oklch(0.48_0.13_155)] px-4 py-2.5 text-sm font-medium text-white shadow-[0_12px_32px_-12px_color-mix(in_oklab,var(--guava-green)_70%,transparent)] transition-[filter,transform] hover:brightness-[1.05] active:scale-[0.98] disabled:opacity-60";
 
 export function AuthForm({
   mode,
@@ -86,7 +90,7 @@ export function AuthForm({
         }
 
         setInfo(
-          "Account created, but Supabase requires email confirmation before you can sign in. Check your inbox — or disable Confirm email in the Supabase Auth settings for local development.",
+          "Account created, but Supabase requires email confirmation before you can sign in. Check your inbox, or disable Confirm email in the Supabase Auth settings for local development.",
         );
         return;
       }
@@ -119,7 +123,7 @@ export function AuthForm({
             autoComplete="name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="rounded-lg border border-input bg-card px-3 py-2 text-foreground outline-none ring-ring focus:ring-2"
+            className={paperInputClass}
             placeholder="Your name"
           />
         </label>
@@ -133,7 +137,7 @@ export function AuthForm({
           autoComplete="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="rounded-lg border border-input bg-card px-3 py-2 text-foreground outline-none ring-ring focus:ring-2"
+          className={paperInputClass}
           placeholder="you@example.com"
         />
       </label>
@@ -150,7 +154,7 @@ export function AuthForm({
             }
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="rounded-lg border border-input bg-card px-3 py-2 text-foreground outline-none ring-ring focus:ring-2"
+            className={paperInputClass}
             placeholder="At least 8 characters"
           />
         </label>
@@ -167,11 +171,7 @@ export function AuthForm({
         </p>
       ) : null}
 
-      <button
-        type="submit"
-        disabled={pending}
-        className="rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-60"
-      >
+      <button type="submit" disabled={pending} className={submitClass}>
         {pending
           ? "Please wait…"
           : mode === "sign-in"
@@ -181,25 +181,22 @@ export function AuthForm({
               : "Send reset link"}
       </button>
 
-      <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-muted-foreground">
+      <div className="flex flex-wrap gap-x-4 gap-y-2 border-t border-guava-green/10 pt-4 text-sm text-muted-foreground">
         {mode !== "sign-in" ? (
-          <Link href="/sign-in" className="hover:text-foreground">
+          <Link href="/sign-in" className="hover:text-guava-green">
             Sign in
           </Link>
         ) : null}
         {mode !== "sign-up" ? (
-          <Link href="/sign-up" className="hover:text-foreground">
+          <Link href="/sign-up" className="hover:text-guava-green">
             Create account
           </Link>
         ) : null}
         {mode !== "forgot-password" ? (
-          <Link href="/forgot-password" className="hover:text-foreground">
+          <Link href="/forgot-password" className="hover:text-guava-green">
             Forgot password
           </Link>
         ) : null}
-        <Link href="/" className="hover:text-foreground">
-          Home
-        </Link>
       </div>
     </form>
   );

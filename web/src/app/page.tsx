@@ -1,17 +1,20 @@
-import type { Metadata } from "next";
 import { LandingFooter } from "@/components/marketing/landing-footer";
 import { LandingHeader } from "@/components/marketing/landing-header";
 import { SoftwareApplicationJsonLd } from "@/components/marketing/json-ld";
 import { HeroLine, HeroMotion, SoftOrb } from "@/components/marketing/hero-motion";
 import { HeroStage } from "@/components/marketing/hero-stage";
 import {
-  GreenPulseMark,
-  HonestyIllustration,
-} from "@/components/marketing/illustrations";
-import { LoopRail, type LoopItem } from "@/components/marketing/loop-rail";
-import { QuotaPips } from "@/components/marketing/quota-pips";
-import { Reveal } from "@/components/marketing/reveal";
+  ClosingSection,
+  FreemiumSection,
+  ListingsSection,
+  LoopSection,
+  ProblemSection,
+} from "@/components/marketing/landing-sections";
+import { SectionFrame } from "@/components/marketing/section-frame";
+import { GreenPulseMark } from "@/components/marketing/illustrations";
 import { SpringCta } from "@/components/marketing/spring-cta";
+import type { LoopItem } from "@/components/marketing/loop-rail";
+import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/" },
@@ -50,7 +53,6 @@ export default function HomePage() {
     <>
       <SoftwareApplicationJsonLd />
       <main className="bg-background text-foreground">
-        {/* Hero: centered message on a layered paper stage */}
         <section
           className="relative overflow-hidden px-4 pb-10 pt-2 md:px-6 md:pb-14"
           style={{ background: "var(--wash-hero)" }}
@@ -97,113 +99,25 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* Problem */}
-        <section
-          className="border-t border-guava-green/15"
-          style={{ background: "var(--wash-mint)" }}
-        >
-          <div className="mx-auto grid max-w-7xl gap-10 px-4 py-20 md:grid-cols-12 md:items-center md:gap-12 md:px-6 md:py-24">
-            <Reveal className="md:col-span-5">
-              <HonestyIllustration />
-            </Reveal>
-            <Reveal className="md:col-span-7" delay={0.08}>
-              <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">
-                Career change needs honesty, not hype.
-              </h2>
-              <p className="mt-4 max-w-[65ch] text-base leading-relaxed text-muted-foreground">
-                Generic generators invent experience. Spreadsheet trackers lose
-                context. GuavaJobs frames transferable skills, scores{" "}
-                <span className="font-medium text-guava-green">fit</span> against
-                the real job, and keeps every draft with its snapshots.
-              </p>
-            </Reveal>
-          </div>
-        </section>
+        <SectionFrame wash="mint" borderTone="green" orbs>
+          <ProblemSection />
+        </SectionFrame>
 
-        {/* Core loop */}
-        <section
-          className="border-t border-guava-pink/15"
-          style={{ background: "var(--wash-pink)" }}
-        >
-          <div className="mx-auto max-w-7xl px-4 py-20 md:px-6 md:py-24">
-            <Reveal>
-              <h2 className="max-w-xl text-2xl font-semibold tracking-tight md:text-3xl">
-                Discover, generate, improve, apply, track.
-              </h2>
-              <p className="mt-3 max-w-[65ch] text-base leading-relaxed text-muted-foreground">
-                One calm loop from first search to a hired outcome. AI assists.
-                You stay in control.
-              </p>
-            </Reveal>
-            <LoopRail items={loop} />
-          </div>
-        </section>
+        <SectionFrame wash="pink" borderTone="pink" orbs>
+          <LoopSection items={loop} />
+        </SectionFrame>
 
-        {/* Freemium */}
-        <section
-          className="border-t border-guava-green/20"
-          style={{ background: "var(--wash-mint)" }}
-        >
-          <div className="mx-auto grid max-w-7xl gap-10 px-4 py-20 md:grid-cols-12 md:px-6 md:py-24">
-            <Reveal className="md:col-span-4">
-              <p className="font-mono text-6xl font-semibold tracking-tight text-guava-green md:text-7xl">
-                5
-              </p>
-              <p className="mt-2 text-sm text-muted-foreground">
-                AI generations / month on Free
-              </p>
-              <QuotaPips />
-            </Reveal>
-            <Reveal className="md:col-span-8" delay={0.06}>
-              <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">
-                Free to start. Clear about the limit.
-              </h2>
-              <p className="mt-4 max-w-[65ch] text-base leading-relaxed text-muted-foreground">
-                Free includes five AI generations each month. Manual tracking
-                stays unlimited. Paid raises the generation cap when you need
-                more speed. No invented past, either way.
-              </p>
-              <div className="mt-8">
-                <SpringCta href="/sign-up" variant="green" withArrow>
-                  Get started
-                </SpringCta>
-              </div>
-            </Reveal>
-          </div>
-        </section>
+        <SectionFrame wash="mint" borderTone="green">
+          <FreemiumSection />
+        </SectionFrame>
 
-        {/* Jobs attribution */}
-        <section className="border-t border-border">
-          <Reveal className="mx-auto max-w-7xl px-4 py-16 md:px-6 md:py-20">
-            <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">
-              Real listings, not a fake feed.
-            </h2>
-            <p className="mt-4 max-w-[65ch] text-base leading-relaxed text-muted-foreground">
-              Job search draws on live market data. Where Adzuna results appear
-              in product, we show{" "}
-              <span className="font-medium text-guava-green">Jobs by Adzuna</span>
-              . You always leave GuavaJobs to finish the employer application.
-            </p>
-          </Reveal>
-        </section>
+        <SectionFrame wash="plain" borderTone="neutral">
+          <ListingsSection />
+        </SectionFrame>
 
-        {/* Closing CTA */}
-        <section
-          className="border-t border-guava-green/15"
-          style={{ background: "var(--wash-hero)" }}
-        >
-          <Reveal className="mx-auto flex max-w-7xl flex-col items-start gap-6 px-4 py-20 md:px-6 md:py-24">
-            <h2 className="max-w-xl text-2xl font-semibold tracking-tight md:text-3xl">
-              Ready for applications that sound like you?
-            </h2>
-            <p className="max-w-[40ch] text-sm text-muted-foreground">
-              Your first honest package is a few taps away.
-            </p>
-            <SpringCta href="/sign-up" variant="green" withArrow>
-              Get started
-            </SpringCta>
-          </Reveal>
-        </section>
+        <SectionFrame wash="hero" borderTone="green" orbs>
+          <ClosingSection />
+        </SectionFrame>
 
         <LandingFooter />
       </main>

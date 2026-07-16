@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { AuthForm } from "@/components/auth/auth-form";
+import { AuthShell } from "@/components/auth/auth-shell";
 
 export const metadata: Metadata = {
   title: "Sign up",
@@ -8,18 +9,11 @@ export const metadata: Metadata = {
 
 export default function SignUpPage() {
   return (
-    <main className="mx-auto flex min-h-[100dvh] max-w-md flex-col justify-center px-4 py-12">
-      <p className="text-sm font-medium text-guava-pink">GuavaJobs</p>
-      <h1 className="mt-2 text-2xl font-semibold tracking-tight">
-        Create account
-      </h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        After signup we sync your user via{" "}
-        <code className="font-mono text-xs">GET /me</code>.
-      </p>
-      <div className="mt-8">
-        <AuthForm mode="sign-up" nextPath="/onboarding" />
-      </div>
-    </main>
+    <AuthShell
+      title="Create account"
+      description="After signup we sync your user via GET /me and walk you through onboarding."
+    >
+      <AuthForm mode="sign-up" nextPath="/onboarding" />
+    </AuthShell>
   );
 }
