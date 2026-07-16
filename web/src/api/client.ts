@@ -95,3 +95,48 @@ export async function apiFetch<T>(
 
   return (await res.json()) as T;
 }
+
+/** Binary responses (e.g. cover-letter PDF). */
+export async function apiFetchBlob(
+  path: string,
+  opts: RequestInit & { token?: string } = {},
+): Promise<Blob> {
+  const { token, headers: initHeaders, body, ...rest } = opts;
+  const headers = new Headers(initHeaders);
+
+  if (body && !(body instanceof FormData) && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(resolveApiUrl(path), {
+      ...rest,
+      headers,
+      body,
+    });
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : "Network error";
+    throw new ApiError(
+      `Could not reach API (${reason}). Check NEXT_PUBLIC_API_URL / API_UPSTREAM and that Coolify is up.`,
+      { status: 0, code: "NETWORK_ERROR" },
+    );
+  }
+
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => null)) as ApiErrorBody | null;
+    throw new ApiError(
+      payload?.error?.message ?? res.statusText ?? "Request failed",
+      {
+        status: res.status,
+        code: payload?.error?.code,
+        details: payload?.error?.details,
+      },
+    );
+  }
+
+  return res.blob();
+}

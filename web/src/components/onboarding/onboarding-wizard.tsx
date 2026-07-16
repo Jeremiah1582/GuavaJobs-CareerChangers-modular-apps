@@ -44,7 +44,9 @@ export function OnboardingWizard() {
   );
   const [atsLoading, setAtsLoading] = useState(false);
   const [atsError, setAtsError] = useState<string | null>(null);
+  const [retryingParse, setRetryingParse] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollStartedFor = useRef<string | null>(null);
 
   const stopPoll = useCallback(() => {
     if (pollRef.current) {
@@ -120,7 +122,9 @@ export function OnboardingWizard() {
 
   const startPoll = useCallback(
     (profileId: string) => {
+      if (pollStartedFor.current === profileId && pollRef.current) return;
       stopPoll();
+      pollStartedFor.current = profileId;
       pollRef.current = setInterval(async () => {
         try {
           const token = await getAccessToken();
@@ -134,9 +138,11 @@ export function OnboardingWizard() {
           if (status === "READY") {
             track(AnalyticsEvents.cv_parse_succeeded);
             stopPoll();
+            pollStartedFor.current = null;
           } else if (status === "FAILED") {
             track(AnalyticsEvents.cv_parse_failed);
             stopPoll();
+            pollStartedFor.current = null;
           }
         } catch {
           // keep polling; transient errors happen
@@ -145,6 +151,17 @@ export function OnboardingWizard() {
     },
     [stopPoll],
   );
+
+  // Resume polling if we land mid-flow on a PENDING CV
+  useEffect(() => {
+    if (
+      !loading &&
+      profile?.id &&
+      parseStatus === "PENDING"
+    ) {
+      startPoll(profile.id);
+    }
+  }, [loading, profile?.id, parseStatus, startPoll]);
 
   async function saveName(name: string) {
     const token = await getAccessToken();
@@ -223,8 +240,46 @@ export function OnboardingWizard() {
       startPoll(profile.id);
     } else if (res.cv.parseStatus === "READY") {
       track(AnalyticsEvents.cv_parse_succeeded);
+      stopPoll();
+      pollStartedFor.current = null;
     } else if (res.cv.parseStatus === "FAILED") {
       track(AnalyticsEvents.cv_parse_failed);
+      stopPoll();
+      pollStartedFor.current = null;
+    }
+  }
+
+  async function retryParse() {
+    if (!profile) throw new Error("Profile missing");
+    setRetryingParse(true);
+    try {
+      const token = await getAccessToken();
+      const cv = await apiFetch<CvMeta>(`/profiles/${profile.id}/cv/reparse`, {
+        method: "POST",
+        token,
+      });
+      setParseStatus(cv.parseStatus);
+      setProfile((prev) =>
+        prev
+          ? {
+              ...prev,
+              currentCv: prev.currentCv
+                ? { ...prev.currentCv, ...cv }
+                : cv,
+            }
+          : prev,
+      );
+      if (cv.parseStatus === "READY") {
+        track(AnalyticsEvents.cv_parse_succeeded);
+        stopPoll();
+      } else if (cv.parseStatus === "FAILED") {
+        track(AnalyticsEvents.cv_parse_failed);
+        stopPoll();
+      } else if (cv.parseStatus === "PENDING") {
+        startPoll(profile.id);
+      }
+    } finally {
+      setRetryingParse(false);
     }
   }
 
@@ -320,6 +375,13 @@ export function OnboardingWizard() {
           <p className="mt-1 text-sm text-muted-foreground">
             Under three minutes. One action per step.
           </p>
+          <button
+            type="button"
+            onClick={finish}
+            className="mt-3 text-xs font-medium text-muted-foreground underline-offset-2 hover:underline"
+          >
+            Skip setup for now
+          </button>
           <div className="mt-8 hidden md:block">
             <OnboardingProgress step={step} />
           </div>
@@ -373,6 +435,9 @@ export function OnboardingWizard() {
                     });
                     setStep("ats");
                   }}
+                  onSkipForNow={finish}
+                  onRetryParse={retryParse}
+                  retrying={retryingParse}
                 />
               ) : null}
               {step === "ats" ? (

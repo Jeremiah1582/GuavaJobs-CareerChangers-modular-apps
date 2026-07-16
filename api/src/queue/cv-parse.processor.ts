@@ -7,6 +7,8 @@ import { StorageService } from '../cv/storage.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CV_PARSE_QUEUE, CvParseJobData } from './queue.constants';
 
+const PARSE_TIMEOUT_MS = 45_000;
+
 @Processor(CV_PARSE_QUEUE)
 export class CvParseProcessor extends WorkerHost {
   private readonly logger = new Logger(CvParseProcessor.name);
@@ -31,12 +33,17 @@ export class CvParseProcessor extends WorkerHost {
       return;
     }
 
+    if (cv.parseStatus === CvParseStatus.READY && cv.parsedText) {
+      this.logger.debug(`CV ${cvDocumentId} already READY; skipping`);
+      return;
+    }
+
     try {
       const buffer = await this.storage.downloadObject(cv.storageKey);
-      const parsedText = await this.cvParse.extractText(
-        buffer,
-        cv.mimeType,
-        cv.fileName,
+      const parsedText = await withTimeout(
+        this.cvParse.extractText(buffer, cv.mimeType, cv.fileName),
+        PARSE_TIMEOUT_MS,
+        'CV text extraction timed out',
       );
 
       await this.prisma.cvDocument.update({
@@ -61,4 +68,24 @@ export class CvParseProcessor extends WorkerHost {
       throw error;
     }
   }
+}
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  message: string,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
 }

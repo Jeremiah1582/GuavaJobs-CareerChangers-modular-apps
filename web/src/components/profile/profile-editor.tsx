@@ -16,6 +16,7 @@ import type {
 } from "@/api/types";
 import { AnalyticsEvents, track } from "@/lib/analytics";
 import { AppPageShell } from "@/components/app/app-page-shell";
+import { QuotaChip } from "@/components/app/quota-chip";
 import {
   PaperPanel,
   paperInputClass,
@@ -35,35 +36,6 @@ const saveButtonClass =
 const ACCEPT =
   ".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const MAX_BYTES = 5 * 1024 * 1024;
-
-function QuotaChip({
-  used,
-  limit,
-}: {
-  used: number;
-  limit: number | null;
-}) {
-  const unlimited = limit == null;
-  const remaining = unlimited ? null : Math.max(0, limit - used);
-  const tight = !unlimited && remaining !== null && remaining <= 1;
-
-  return (
-    <div
-      className={[
-        "inline-flex items-center gap-2 rounded-lg border px-3 py-2 font-mono text-sm",
-        tight
-          ? "border-guava-pink/40 bg-guava-pink/10 text-foreground"
-          : "border-guava-green/35 bg-guava-green/10 text-foreground",
-      ].join(" ")}
-    >
-      <span className="text-xs font-sans text-muted-foreground">AI gens</span>
-      <span className={tight ? "text-guava-pink" : "text-guava-green"}>
-        {used}
-        {unlimited ? " / unlimited" : ` / ${limit}`}
-      </span>
-    </div>
-  );
-}
 
 function Skeleton() {
   return (
@@ -335,6 +307,44 @@ export function ProfileEditor() {
     }
   }
 
+  async function retryParse() {
+    if (!profile) return;
+    setCvError(null);
+    setCvPending(true);
+    try {
+      const token = await getToken();
+      const cv = await apiFetch<CvMeta>(`/profiles/${profile.id}/cv/reparse`, {
+        method: "POST",
+        token,
+      });
+      setParseStatus(cv.parseStatus);
+      setProfile((prev) =>
+        prev
+          ? {
+              ...prev,
+              currentCv: prev.currentCv ? { ...prev.currentCv, ...cv } : cv,
+            }
+          : prev,
+      );
+      if (cv.parseStatus === "READY") {
+        track(AnalyticsEvents.cv_parse_succeeded);
+        stopPoll();
+      } else if (cv.parseStatus === "FAILED") {
+        track(AnalyticsEvents.cv_parse_failed);
+        stopPoll();
+        setCvError(
+          "Parse failed. Try another PDF or DOCX with selectable text.",
+        );
+      } else {
+        startPoll(profile.id);
+      }
+    } catch (err) {
+      setCvError(err instanceof Error ? err.message : "Retry failed");
+    } finally {
+      setCvPending(false);
+    }
+  }
+
   if (loading) {
     return (
       <AppPageShell
@@ -595,9 +605,19 @@ export function ProfileEditor() {
           )}
 
           {parseStatus === "PENDING" ? (
-            <p className="text-sm text-muted-foreground" role="status">
-              Parsing your CV… this usually takes a few seconds.
-            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="text-sm text-muted-foreground" role="status">
+                Parsing your CV… this usually takes a few seconds.
+              </p>
+              <button
+                type="button"
+                disabled={cvPending}
+                onClick={() => void retryParse()}
+                className="text-sm font-medium text-guava-green underline-offset-2 hover:underline disabled:opacity-60"
+              >
+                Retry extraction
+              </button>
+            </div>
           ) : null}
           {parseStatus === "FAILED" ? (
             <p className="text-sm text-destructive" role="alert">

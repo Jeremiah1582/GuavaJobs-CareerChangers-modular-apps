@@ -46,6 +46,7 @@ export function JobFeed() {
 
       return apiFetch<JobSearchResponse>(`/jobs/search?${params}`, { token });
     },
+    staleTime: 30_000,
     retry: 1,
   });
 

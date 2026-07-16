@@ -1,7 +1,5 @@
-import { InjectQueue } from '@nestjs/bullmq';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { CvParseStatus } from '@prisma/client';
-import { Queue } from 'bullmq';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppError } from '../shared/schemas/error.schema';
@@ -10,10 +8,11 @@ import {
   CvMeta,
   CvUploadResponse,
 } from '../shared/schemas/cv.schema';
-import { CV_PARSE_QUEUE, CvParseJobData } from '../queue/queue.constants';
+import { CvParseService } from './cv-parse.service';
 import { StorageService } from './storage.service';
 
 const MAX_CV_BYTES = 5 * 1024 * 1024;
+const PARSE_TIMEOUT_MS = 45_000;
 const ALLOWED_MIME_TYPES = new Set([
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -22,10 +21,12 @@ const ALLOWED_MIME_TYPES = new Set([
 
 @Injectable()
 export class CvService {
+  private readonly logger = new Logger(CvService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
-    @InjectQueue(CV_PARSE_QUEUE) private readonly cvParseQueue: Queue<CvParseJobData>,
+    private readonly cvParse: CvParseService,
   ) {}
 
   async uploadCv(
@@ -76,23 +77,48 @@ export class CvService {
       return created;
     });
 
-    await this.cvParseQueue.add(
-      'parse',
-      { cvDocumentId: cv.id, profileId, userId },
-      {
-        jobId: `cv-parse-${cv.id}`,
-        removeOnComplete: 100,
-        removeOnFail: 50,
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 2000 },
-      },
+    // Parse in-request so uploads never hang forever waiting on BullMQ workers.
+    const resolved = await this.parseInline(
+      cv.id,
+      file.buffer,
+      file.mimetype,
+      file.originalname,
     );
 
     return {
       profileId,
       currentCvId: cv.id,
-      cv: this.toCvMeta(cv),
+      cv: this.toCvMeta(resolved),
     };
+  }
+
+  /**
+   * Re-run parse for a stuck PENDING CV (e.g. uploaded before inline parse shipped).
+   */
+  async reparseCurrentCv(userId: string, profileId: string): Promise<CvMeta> {
+    await this.assertProfileOwnership(userId, profileId);
+
+    const profile = await this.prisma.profile.findFirst({
+      where: { id: profileId, userId },
+      include: { currentCv: true },
+    });
+    if (!profile?.currentCv) {
+      throw new AppError('CV_NOT_FOUND', 'No CV uploaded for this profile', 404);
+    }
+
+    const cv = profile.currentCv;
+    if (cv.parseStatus === CvParseStatus.READY && cv.parsedText) {
+      return this.toCvMeta(cv);
+    }
+
+    const buffer = await this.storage.downloadObject(cv.storageKey);
+    const resolved = await this.parseInline(
+      cv.id,
+      buffer,
+      cv.mimeType,
+      cv.fileName,
+    );
+    return this.toCvMeta(resolved);
   }
 
   async getDownloadUrl(
@@ -120,9 +146,7 @@ export class CvService {
     };
   }
 
-  async getCurrentCvMeta(
-    profileId: string,
-  ): Promise<CvMeta | null> {
+  async getCurrentCvMeta(profileId: string): Promise<CvMeta | null> {
     const profile = await this.prisma.profile.findUnique({
       where: { id: profileId },
       include: { currentCv: true },
@@ -131,6 +155,38 @@ export class CvService {
       return null;
     }
     return this.toCvMeta(profile.currentCv);
+  }
+
+  private async parseInline(
+    cvDocumentId: string,
+    buffer: Buffer,
+    mimeType: string,
+    fileName: string,
+  ) {
+    try {
+      const parsedText = await withTimeout(
+        this.cvParse.extractText(buffer, mimeType, fileName),
+        PARSE_TIMEOUT_MS,
+        'CV text extraction timed out',
+      );
+
+      return this.prisma.cvDocument.update({
+        where: { id: cvDocumentId },
+        data: {
+          parsedText,
+          parseStatus: CvParseStatus.READY,
+        },
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unknown parse error';
+      this.logger.warn(`Inline CV parse failed for ${cvDocumentId}: ${message}`);
+
+      return this.prisma.cvDocument.update({
+        where: { id: cvDocumentId },
+        data: { parseStatus: CvParseStatus.FAILED },
+      });
+    }
   }
 
   private validateFile(file: Express.Multer.File): void {
@@ -197,4 +253,24 @@ export class CvService {
       uploadedAt: cv.uploadedAt.toISOString(),
     };
   }
+}
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  message: string,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
 }

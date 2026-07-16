@@ -15,7 +15,10 @@ export default async function JobDetailPage({
   const { canonicalKey } = await params;
 
   return (
-    <AppPageShell title="Role detail" description="Review the listing before you generate a package.">
+    <AppPageShell
+      title="Role detail"
+      description="One primary action: generate an honest application package from your profile and CV."
+    >
       <JobDetail canonicalKeyParam={canonicalKey} />
     </AppPageShell>
   );

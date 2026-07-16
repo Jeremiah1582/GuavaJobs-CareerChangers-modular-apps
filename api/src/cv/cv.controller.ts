@@ -43,6 +43,17 @@ export class CvController {
     return this.cvService.uploadCv(user.id, profileId, file);
   }
 
+  @Post('reparse')
+  @ApiOperation({
+    summary: 'Re-run text extraction on the current CV (unstick PENDING)',
+  })
+  reparse(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('profileId') profileId: string,
+  ) {
+    return this.cvService.reparseCurrentCv(user.id, profileId);
+  }
+
   @Get('download')
   @ApiOperation({ summary: 'Signed URL for current CV download' })
   download(

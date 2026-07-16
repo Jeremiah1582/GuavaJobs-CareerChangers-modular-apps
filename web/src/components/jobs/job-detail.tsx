@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ArrowSquareOut, MapPin } from "@phosphor-icons/react";
 import { apiFetch, ApiError } from "@/api/client";
 import type { UnifiedJob } from "@/api/types";
+import { GenerateCta } from "@/components/applications/generate-cta";
 import { PaperPanel } from "@/components/ui/paper-panel";
 import { AnalyticsEvents, track } from "@/lib/analytics";
 import { decodeJobKey, formatSalary } from "@/lib/jobs";
@@ -107,12 +108,13 @@ export function JobDetail({ canonicalKeyParam }: { canonicalKeyParam: string }) 
               </p>
             )}
 
-            <div className="mt-8 flex flex-wrap gap-3">
+            <div className="mt-8 space-y-4 border-t border-guava-green/10 pt-6">
+              <GenerateCta canonicalJobKey={job.canonicalKey} />
               <a
                 href={job.applyUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-br from-[oklch(0.68_0.13_150)] via-[oklch(0.58_0.16_150)] to-[oklch(0.48_0.13_155)] px-5 py-2.5 text-sm font-medium text-white shadow-[0_12px_32px_-12px_color-mix(in_oklab,var(--guava-green)_70%,transparent)] transition-[filter,transform] hover:brightness-[1.05]"
+                className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-guava-green"
               >
                 Open employer apply page
                 <ArrowSquareOut className="size-4" weight="bold" />
@@ -121,7 +123,7 @@ export function JobDetail({ canonicalKeyParam }: { canonicalKeyParam: string }) 
           </PaperPanel>
 
           <p className="text-center text-xs text-muted-foreground">
-            Jobs by Adzuna · Generate flow ships next in M2
+            Jobs by Adzuna
           </p>
         </>
       ) : null}

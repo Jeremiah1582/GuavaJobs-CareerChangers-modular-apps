@@ -1,6 +1,13 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { HAS_APPS_COOKIE } from "@/lib/applications";
 import { ONBOARDING_COOKIE } from "@/lib/onboarding";
+
+function defaultAppHome(request: NextRequest): string {
+  return request.cookies.get(HAS_APPS_COOKIE)?.value === "1"
+    ? "/app/applications"
+    : "/app/jobs";
+}
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -51,7 +58,7 @@ export async function updateSession(request: NextRequest) {
 
   if (user && isAuthRoute) {
     const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = onboarded ? "/app/profile" : "/onboarding";
+    redirectUrl.pathname = onboarded ? defaultAppHome(request) : "/onboarding";
     return NextResponse.redirect(redirectUrl);
   }
 
@@ -63,7 +70,7 @@ export async function updateSession(request: NextRequest) {
 
   if (user && isOnboarding && onboarded) {
     const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = "/app/jobs";
+    redirectUrl.pathname = defaultAppHome(request);
     return NextResponse.redirect(redirectUrl);
   }
 

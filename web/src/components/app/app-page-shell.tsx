@@ -7,14 +7,22 @@ export function AppPageShell({
   description,
   children,
   badge,
+  wide = false,
 }: {
   title: string;
   description?: string;
   children: ReactNode;
   badge?: ReactNode;
+  /** Wider shell for letter + ATS review layouts */
+  wide?: boolean;
 }) {
   return (
-    <main className="mx-auto max-w-3xl px-4 py-10 md:px-6 md:py-12">
+    <main
+      className={[
+        "mx-auto px-4 py-10 md:px-6 md:py-12",
+        wide ? "max-w-7xl" : "max-w-3xl",
+      ].join(" ")}
+    >
       <Reveal>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>

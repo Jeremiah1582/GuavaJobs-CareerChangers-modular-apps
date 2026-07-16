@@ -102,3 +102,102 @@ export type UnifiedJob = JobListItem & {
   adzunaId?: string;
   adzunaCountry?: string;
 };
+
+export type GenerationStatus =
+  | "PENDING"
+  | "PROCESSING"
+  | "COMPLETED"
+  | "FAILED";
+
+export type ApplicationAtsReport = {
+  score: number;
+  letterScore?: number | null;
+  cvScore?: number | null;
+  missingKeywords: string[];
+  suggestions: string[];
+  strengths: string[];
+  gaps: string[];
+  actionableSteps: string[];
+  keywordCoverage: Record<string, number>;
+  icpMatch: Record<string, unknown>;
+  breakdown: Record<string, number>;
+  assessedAt: string;
+};
+
+export type ApplicationStatus =
+  | "DRAFT"
+  | "APPLIED"
+  | "INTERVIEWING"
+  | "OFFER"
+  | "OFFER_ACCEPTED"
+  | "OFFER_DECLINED"
+  | "HIRED"
+  | "REJECTED"
+  | "WITHDRAWN"
+  | "ARCHIVED";
+
+export type ApplicationEventType =
+  | "RESPONSE"
+  | "INTERVIEW"
+  | "NOTE"
+  | "NEXT_STEP"
+  | "STATUS_CHANGE";
+
+export type ApplicationEvent = {
+  id: string;
+  eventType: ApplicationEventType;
+  occurredAt: string;
+  content: string;
+  contactName: string | null;
+  createdAt: string;
+  updatedAt?: string;
+};
+
+export type ApplicationResponse = {
+  id: string;
+  userId: string;
+  profileId: string;
+  status: ApplicationStatus | string;
+  generationMode: "AI" | "MANUAL";
+  canonicalJobKey: string | null;
+  applyUrl: string | null;
+  generationStatus: GenerationStatus | null;
+  generationError: string | null;
+  jobSnapshot: Record<string, unknown> | null;
+  profileSnapshot: Record<string, unknown> | null;
+  cvSnapshot: Record<string, unknown> | null;
+  pastedJobDescription?: string | null;
+  companyName: string | null;
+  jobRoleTitle: string | null;
+  jobLocation?: string | null;
+  sourceOfListing?: string | null;
+  industry?: string | null;
+  coverLetterContent: string | null;
+  coverLetterTemplateId: string;
+  coverLetterSource: "AI" | "MANUAL";
+  coverLetterEdited: boolean;
+  appliedAt?: string | null;
+  atsReport: ApplicationAtsReport | null;
+  events?: ApplicationEvent[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreateManualApplicationBody = {
+  profileId: string;
+  companyName: string;
+  jobRoleTitle: string;
+  jobLocation?: string;
+  jobWebsite?: string;
+  industry?: string;
+  sourceOfListing?: string;
+  applyUrl?: string;
+  pastedJobDescription?: string;
+  status?: ApplicationStatus;
+};
+
+export function isGeneratingStatus(
+  status: GenerationStatus | null | undefined,
+): boolean {
+  return status === "PENDING" || status === "PROCESSING";
+}
