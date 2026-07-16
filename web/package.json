@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "api:types": "openapi-typescript \"${NEXT_PUBLIC_API_URL}/api/docs-json\" -o src/api/types.gen.ts"
+    "api:types": "openapi-typescript \"${API_UPSTREAM:-http://n106xgrqkd5sxussrt8lq40k.46.224.155.225.sslip.io}/api/docs-json\" -o src/api/types.gen.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",

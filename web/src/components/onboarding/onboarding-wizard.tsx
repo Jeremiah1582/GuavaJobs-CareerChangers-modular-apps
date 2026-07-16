@@ -54,7 +54,15 @@ export function OnboardingWizard() {
   }, []);
 
   const load = useCallback(async () => {
-    const token = await getAccessToken();
+    let token: string;
+    try {
+      token = await getAccessToken();
+    } catch {
+      router.replace("/sign-in?next=/onboarding");
+      // Keep loading UI until navigation completes
+      return "redirect" as const;
+    }
+
     const meRes = await apiFetch<MeResponse>("/me", { token });
     setMe(meRes);
 
@@ -85,21 +93,23 @@ export function OnboardingWizard() {
     } else if (meRes.name && meRes.name !== meRes.email.split("@")[0]) {
       setStep("industry");
     }
-  }, []);
+    return "ok" as const;
+  }, [router]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        await load();
+        const result = await load();
+        if (result === "redirect") return;
+        if (!cancelled) setLoading(false);
       } catch (err) {
         if (!cancelled) {
           setBootError(
             err instanceof Error ? err.message : "Failed to start onboarding",
           );
+          setLoading(false);
         }
-      } finally {
-        if (!cancelled) setLoading(false);
       }
     })();
     return () => {
@@ -275,13 +285,21 @@ export function OnboardingWizard() {
         <p className="mt-2 text-sm text-destructive" role="alert">
           {bootError ?? "Missing profile"}
         </p>
-        <button
-          type="button"
-          onClick={() => window.location.reload()}
-          className="mt-6 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
-        >
-          Retry
-        </button>
+        <div className="mt-6 flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+          >
+            Retry
+          </button>
+          <a
+            href="/sign-in?next=/onboarding"
+            className="rounded-lg border border-border px-4 py-2 text-sm font-medium"
+          >
+            Sign in again
+          </a>
+        </div>
       </div>
     );
   }

@@ -4,10 +4,30 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { apiFetch } from "@/api/client";
+import { apiFetch, ApiError } from "@/api/client";
 import { AnalyticsEvents, track } from "@/lib/analytics";
 
 type Mode = "sign-in" | "sign-up" | "forgot-password";
+
+function authErrorMessage(err: unknown): string {
+  if (!(err instanceof Error)) return "Something went wrong";
+  const msg = err.message || "";
+  const lower = msg.toLowerCase();
+
+  if (
+    lower.includes("email not confirmed") ||
+    lower.includes("email_not_confirmed")
+  ) {
+    return "Email not confirmed. Open the link in your inbox, or in Supabase Dashboard → Authentication → Providers → Email → turn off Confirm email for local dev.";
+  }
+  if (lower.includes("invalid login credentials")) {
+    return "Wrong email or password.";
+  }
+  if (err instanceof ApiError && err.status === 0) {
+    return msg;
+  }
+  return msg;
+}
 
 export function AuthForm({
   mode,
@@ -51,6 +71,7 @@ export function AuthForm({
           password,
           options: {
             data: { full_name: name.trim() || undefined },
+            emailRedirectTo: `${window.location.origin}/sign-in`,
           },
         });
         if (signUpError) throw signUpError;
@@ -65,7 +86,7 @@ export function AuthForm({
         }
 
         setInfo(
-          "Account created. Confirm your email if required, then sign in.",
+          "Account created, but Supabase requires email confirmation before you can sign in. Check your inbox — or disable Confirm email in the Supabase Auth settings for local development.",
         );
         return;
       }
@@ -82,9 +103,7 @@ export function AuthForm({
       router.replace(nextPath);
       router.refresh();
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Something went wrong";
-      setError(message);
+      setError(authErrorMessage(err));
     } finally {
       setPending(false);
     }

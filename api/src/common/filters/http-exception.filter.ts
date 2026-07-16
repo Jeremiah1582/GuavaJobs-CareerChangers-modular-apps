@@ -58,10 +58,24 @@ export class HttpExceptionFilter implements ExceptionFilter {
     }
 
     console.error(exception);
+    const devMode =
+      process.env.DEV_MODE === 'True' ||
+      process.env.DEV_MODE === 'true' ||
+      process.env.NODE_ENV !== 'production';
+    const prismaMessage =
+      exception &&
+      typeof exception === 'object' &&
+      'message' in exception &&
+      typeof (exception as { message: unknown }).message === 'string'
+        ? (exception as { message: string }).message
+        : null;
     response.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       error: {
         code: 'INTERNAL_ERROR',
         message: 'An unexpected error occurred',
+        ...(devMode && prismaMessage
+          ? { details: { message: prismaMessage.slice(0, 500) } }
+          : {}),
       },
     });
   }

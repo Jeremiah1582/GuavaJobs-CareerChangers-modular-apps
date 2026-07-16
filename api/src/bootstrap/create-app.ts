@@ -25,8 +25,19 @@ function isAllowedWebOrigin(
   }
 
   try {
-    const host = new URL(origin).hostname;
-    return host.endsWith('.vercel.app');
+    const url = new URL(origin);
+    if (url.hostname.endsWith('.vercel.app')) {
+      return true;
+    }
+    // Local LAN access (phone / other device hitting Next via private IP)
+    const localHost =
+      url.hostname === 'localhost' ||
+      url.hostname === '127.0.0.1' ||
+      /^192\.168\.\d{1,3}\.\d{1,3}$/.test(url.hostname) ||
+      /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(url.hostname) ||
+      /^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$/.test(url.hostname);
+    const localPort = url.port === '3000' || url.port === '3001';
+    return localHost && localPort;
   } catch {
     return false;
   }

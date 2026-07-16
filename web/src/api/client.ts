@@ -23,12 +23,29 @@ export class ApiError extends Error {
   }
 }
 
-function apiBaseUrl(): string {
-  const base = process.env.NEXT_PUBLIC_API_URL;
-  if (!base) {
-    throw new Error("NEXT_PUBLIC_API_URL is not set");
+/**
+ * Resolve API base.
+ * - Absolute `NEXT_PUBLIC_API_URL` (http…) → call Coolify directly (`…/api/v1/...`)
+ * - Relative `/guava-api` (default) → same-origin Next rewrite (avoids browser CORS)
+ */
+function resolveApiUrl(path: string): string {
+  const configured = (
+    process.env.NEXT_PUBLIC_API_URL || "/guava-api"
+  ).replace(/\/$/, "");
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+
+  if (configured.startsWith("http://") || configured.startsWith("https://")) {
+    return `${configured}/api/v1${normalizedPath}`;
   }
-  return base.replace(/\/$/, "");
+
+  const relative = `${configured}${normalizedPath}`;
+  if (typeof window === "undefined") {
+    const site = (
+      process.env.NEXT_PUBLIC_SITE_URL || "http://127.0.0.1:3000"
+    ).replace(/\/$/, "");
+    return `${site}${relative}`;
+  }
+  return relative;
 }
 
 export async function apiFetch<T>(
@@ -45,11 +62,20 @@ export async function apiFetch<T>(
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const res = await fetch(`${apiBaseUrl()}/api/v1${path}`, {
-    ...rest,
-    headers,
-    body,
-  });
+  let res: Response;
+  try {
+    res = await fetch(resolveApiUrl(path), {
+      ...rest,
+      headers,
+      body,
+    });
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : "Network error";
+    throw new ApiError(
+      `Could not reach API (${reason}). Check NEXT_PUBLIC_API_URL / API_UPSTREAM and that Coolify is up.`,
+      { status: 0, code: "NETWORK_ERROR" },
+    );
+  }
 
   if (!res.ok) {
     const payload = (await res.json().catch(() => null)) as ApiErrorBody | null;
