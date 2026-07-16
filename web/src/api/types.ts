@@ -71,3 +71,34 @@ export type CreateOrPatchProfileBody = {
   summary?: string;
   isDefault?: boolean;
 };
+
+export type JobListItem = {
+  canonicalKey: string;
+  title: string;
+  company: string;
+  location: string | null;
+  snippet: string;
+  applyUrl: string;
+  atsType: "greenhouse" | "lever" | "ashby" | "adzuna" | "unknown";
+  hasFullDescription: boolean;
+  applyType: "url" | "unknown";
+  salaryMin?: number | null;
+  salaryMax?: number | null;
+  salaryCurrency?: string | null;
+  postedAt?: string | null;
+};
+
+export type JobSearchResponse = {
+  results: JobListItem[];
+  page: number;
+  totalResults: number;
+  attribution: "Jobs by Adzuna";
+};
+
+export type UnifiedJob = JobListItem & {
+  description: string;
+  source: "adzuna";
+  fetchedAt: string;
+  adzunaId?: string;
+  adzunaCountry?: string;
+};
