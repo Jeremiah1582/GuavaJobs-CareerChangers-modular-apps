@@ -1,8 +1,9 @@
 @import "tailwindcss";
 
 :root {
-  --guava-pink: oklch(0.62 0.16 12);
-  --guava-green: oklch(0.55 0.12 150);
+  /* Slightly punchier for marketing pop; still Guava, not neon */
+  --guava-pink: oklch(0.64 0.19 12);
+  --guava-green: oklch(0.58 0.16 150);
 
   --background: oklch(0.995 0.002 90);
   --foreground: oklch(0.20 0.02 280);
@@ -45,8 +46,18 @@
   --wash-hero: linear-gradient(
     135deg,
     oklch(0.995 0.002 90) 0%,
-    oklch(0.97 0.02 12) 45%,
-    oklch(0.96 0.025 150 / 0.35) 100%
+    oklch(0.96 0.04 12) 38%,
+    oklch(0.94 0.055 150 / 0.55) 100%
+  );
+  --wash-pink: linear-gradient(
+    180deg,
+    oklch(0.97 0.035 12) 0%,
+    oklch(0.98 0.02 150 / 0.35) 100%
+  );
+  --wash-mint: linear-gradient(
+    180deg,
+    oklch(0.96 0.045 150 / 0.7) 0%,
+    oklch(0.995 0.002 90) 100%
   );
 }
 

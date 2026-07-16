@@ -19,7 +19,7 @@ export const metadata: Metadata = {
     template: "%s · GuavaJobs",
   },
   description:
-    "Honest AI-assisted job applications — generate tailored letters, track every role, apply with confidence.",
+    "Honest AI-assisted job applications. Generate tailored letters, see fit before you apply, and track every role.",
   metadataBase: new URL(
     process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000",
   ),
@@ -28,6 +28,21 @@ export const metadata: Metadata = {
     description:
       "Honest AI-assisted job applications for career changers and job seekers.",
     type: "website",
+    images: [
+      {
+        url: "/og.png",
+        width: 1200,
+        height: 630,
+        alt: "GuavaJobs",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "GuavaJobs",
+    description:
+      "Honest AI-assisted job applications for career changers and job seekers.",
+    images: ["/og.png"],
   },
   robots: {
     index: true,

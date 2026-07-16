@@ -1,3 +1,5 @@
+import posthog from "posthog-js";
+
 /** PostHog event names — keep identical across web and (later) mobile. */
 export const AnalyticsEvents = {
   signup_completed: "signup_completed",
@@ -23,7 +25,14 @@ export function track(
   event: AnalyticsEvent,
   properties?: Record<string, string | number | boolean | null>,
 ): void {
-  // Wired in M1.6 once NEXT_PUBLIC_POSTHOG_KEY is set.
+  if (typeof window === "undefined") return;
+
+  const key = process.env.NEXT_PUBLIC_POSTHOG_KEY;
+  if (key) {
+    posthog.capture(event, properties);
+    return;
+  }
+
   if (process.env.NODE_ENV === "development" && process.env.DEBUG_ANALYTICS) {
     console.debug("[analytics]", event, properties ?? {});
   }

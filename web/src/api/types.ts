@@ -38,6 +38,8 @@ export type ProfileResponse = {
   seniority: SeniorityLevel;
   primaryIndustry: ProfileIndustry;
   currentCvId: string | null;
+  locationCity?: string | null;
+  locationCountry?: string | null;
 };
 
 export type ProfileDetail = ProfileResponse & {
