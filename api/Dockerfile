@@ -25,8 +25,11 @@ COPY prisma ./prisma
 RUN npx prisma generate
 
 COPY . .
-RUN npm run build \
-  && npm prune --omit=dev
+RUN npm run build
+# `npm prune --omit=dev` does not reliably drop devDependencies (npm/cli#8277).
+# Reinstall from the lockfile with production deps only, then regenerate Prisma.
+RUN npm ci --omit=dev \
+  && npx prisma generate
 
 FROM node:20-slim AS runner
 WORKDIR /app
