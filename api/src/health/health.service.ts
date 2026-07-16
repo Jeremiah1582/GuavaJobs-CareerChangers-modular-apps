@@ -13,6 +13,7 @@ type QueueStats = { waiting: number; active: number };
 export type HealthCheckResult = {
   status: 'ok' | 'degraded' | 'error';
   database: 'connected' | 'disconnected';
+  schema: 'ready' | 'missing';
   redis: 'connected' | 'disconnected';
   latencyMs: number;
   databaseLatencyMs?: number;
@@ -35,6 +36,7 @@ export class HealthService {
   async check(): Promise<{ result: HealthCheckResult; httpStatus: number }> {
     const started = Date.now();
     let database: HealthCheckResult['database'] = 'disconnected';
+    let schema: HealthCheckResult['schema'] = 'missing';
     let redis: HealthCheckResult['redis'] = 'disconnected';
     let databaseLatencyMs: number | undefined;
     let redisLatencyMs: number | undefined;
@@ -46,6 +48,17 @@ export class HealthService {
       database = 'connected';
     } catch {
       database = 'disconnected';
+    }
+
+    if (database === 'connected') {
+      try {
+        await this.prisma.user.findFirst({
+          select: { id: true },
+        });
+        schema = 'ready';
+      } catch {
+        schema = 'missing';
+      }
     }
 
     try {
@@ -66,7 +79,7 @@ export class HealthService {
 
     const latencyMs = Date.now() - started;
     let status: HealthCheckResult['status'] = 'ok';
-    if (database === 'disconnected') {
+    if (database === 'disconnected' || schema === 'missing') {
       status = 'error';
     } else if (redis === 'disconnected') {
       status = 'degraded';
@@ -75,6 +88,7 @@ export class HealthService {
     const result: HealthCheckResult = {
       status,
       database,
+      schema,
       redis,
       latencyMs,
       databaseLatencyMs,
@@ -85,7 +99,8 @@ export class HealthService {
       },
     };
 
-    const httpStatus = database === 'disconnected' ? 503 : 200;
+    const httpStatus =
+      database === 'disconnected' || schema === 'missing' ? 503 : 200;
     return { result, httpStatus };
   }
 }

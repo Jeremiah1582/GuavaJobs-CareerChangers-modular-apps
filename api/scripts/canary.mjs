@@ -70,6 +70,11 @@ try {
     if (body.status !== 'ok' && body.status !== 'degraded') {
       throw new Error(`unexpected health status: ${String(body.status)}`);
     }
+    if (body.schema && body.schema !== 'ready') {
+      throw new Error(
+        `database schema not ready (${String(body.schema)}) — run prisma migrate deploy`,
+      );
+    }
   });
 } catch {
   failed = true;

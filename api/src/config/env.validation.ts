@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import {
+  deriveJwksUrl,
+  normalizeDatabaseUrl,
+  supabaseProjectRef,
+} from './database-url';
 
 export const envSchema = z
   .object({
@@ -6,10 +11,10 @@ export const envSchema = z
       .enum(['development', 'production', 'test'])
       .default('development'),
     PORT: z.coerce.number().int().positive().default(3000),
-    DATABASE_URL: z.string().min(1),
+    DATABASE_URL: z.string().min(1).transform(normalizeDatabaseUrl),
     DIRECT_URL: z.string().min(1),
     SUPABASE_URL: z.string().url(),
-    SUPABASE_JWKS_URL: z.string().url(),
+    SUPABASE_JWKS_URL: z.string().url().optional(),
     SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
     SUPABASE_SECRET_KEY: z.string().optional(),
     SUPABASE_STORAGE_BUCKET: z.string().default('cvs'),
@@ -38,17 +43,39 @@ export const envSchema = z
     },
   );
 
-export type EnvConfig = z.infer<typeof envSchema>;
+export type EnvConfig = z.infer<typeof envSchema> & {
+  SUPABASE_JWKS_URL: string;
+};
 
 export function validateEnv(config: Record<string, unknown>): EnvConfig {
-  const parsed = envSchema.safeParse(config);
+  const withJwks = { ...config };
+  if (
+    typeof withJwks.SUPABASE_URL === 'string' &&
+    !withJwks.SUPABASE_JWKS_URL
+  ) {
+    withJwks.SUPABASE_JWKS_URL = deriveJwksUrl(withJwks.SUPABASE_URL);
+  }
+
+  const parsed = envSchema.safeParse(withJwks);
   if (!parsed.success) {
     const message = parsed.error.issues
       .map((i) => `${i.path.join('.')}: ${i.message}`)
       .join('; ');
     throw new Error(`Invalid environment: ${message}`);
   }
-  return parsed.data;
+
+  const env = parsed.data as EnvConfig;
+  env.SUPABASE_JWKS_URL =
+    env.SUPABASE_JWKS_URL ?? deriveJwksUrl(env.SUPABASE_URL);
+
+  const ref = supabaseProjectRef(env.SUPABASE_URL);
+  if (ref && !env.DATABASE_URL.includes(ref) && !env.DIRECT_URL.includes(ref)) {
+    console.warn(
+      `[env] SUPABASE_URL project ref "${ref}" does not appear in DATABASE_URL/DIRECT_URL — auth sync will fail against the wrong database.`,
+    );
+  }
+
+  return env;
 }
 
 export function getSupabaseServiceRoleKey(env: EnvConfig): string {

@@ -5,6 +5,7 @@ import {
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { Response } from 'express';
 import { AppError } from '../../shared/schemas/error.schema';
 import { ZodError } from 'zod';
@@ -32,6 +33,23 @@ export class HttpExceptionFilter implements ExceptionFilter {
           code: 'VALIDATION_ERROR',
           message: 'Request validation failed',
           details: { issues: exception.issues },
+        },
+      });
+      return;
+    }
+
+    if (exception instanceof Prisma.PrismaClientKnownRequestError) {
+      const isMissingTable =
+        exception.code === 'P2021' || exception.code === 'P2022';
+      response.status(
+        isMissingTable ? HttpStatus.SERVICE_UNAVAILABLE : HttpStatus.BAD_REQUEST,
+      ).json({
+        error: {
+          code: isMissingTable ? 'DATABASE_SCHEMA_MISSING' : 'DATABASE_ERROR',
+          message: isMissingTable
+            ? 'Database schema is not migrated. Run prisma migrate deploy on the API database.'
+            : 'Database request failed',
+          details: { prismaCode: exception.code },
         },
       });
       return;
