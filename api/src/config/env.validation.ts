@@ -22,6 +22,8 @@ export const envSchema = z
     ADZUNA_APP_KEY: z.string().optional(),
     ADZUNA_API_KEY: z.string().optional(),
     ADZUNA_DEFAULT_COUNTRY: z.string().length(2).default('gb'),
+    /** Exact production web origin (Vercel). Preview *.vercel.app always allowed. */
+    WEB_ORIGIN: z.string().url().optional(),
     DEV_MODE: z
       .string()
       .optional()

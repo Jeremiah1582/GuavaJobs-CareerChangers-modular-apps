@@ -1,0 +1,30 @@
+/** PostHog event names — keep identical across web and (later) mobile. */
+export const AnalyticsEvents = {
+  signup_completed: "signup_completed",
+  login_completed: "login_completed",
+  onboarding_step_completed: "onboarding_step_completed",
+  cv_uploaded: "cv_uploaded",
+  cv_parse_succeeded: "cv_parse_succeeded",
+  cv_parse_failed: "cv_parse_failed",
+  profile_ats_viewed: "profile_ats_viewed",
+  job_search: "job_search",
+  job_detail_view: "job_detail_view",
+  generate_started: "generate_started",
+  generate_completed: "generate_completed",
+  generate_failed: "generate_failed",
+  letter_edited: "letter_edited",
+  quota_hit: "quota_hit",
+} as const;
+
+export type AnalyticsEvent =
+  (typeof AnalyticsEvents)[keyof typeof AnalyticsEvents];
+
+export function track(
+  event: AnalyticsEvent,
+  properties?: Record<string, string | number | boolean | null>,
+): void {
+  // Wired in M1.6 once NEXT_PUBLIC_POSTHOG_KEY is set.
+  if (process.env.NODE_ENV === "development" && process.env.DEBUG_ANALYTICS) {
+    console.debug("[analytics]", event, properties ?? {});
+  }
+}
