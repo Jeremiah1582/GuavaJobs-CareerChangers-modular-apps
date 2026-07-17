@@ -18,6 +18,7 @@ import { AnalyticsEvents, track } from "@/lib/analytics";
 import { AppPageShell } from "@/components/app/app-page-shell";
 import { FreemiumLimitCard } from "@/components/app/freemium-limit-card";
 import { QuotaChip } from "@/components/app/quota-chip";
+import { ProfileAtsEasyRead } from "@/components/profile/profile-ats-easy-read";
 import {
   PaperPanel,
   paperInputClass,
@@ -674,22 +675,24 @@ export function ProfileEditor() {
               {cvError}
             </p>
           ) : null}
-
-          {profile.generalAtsAssessment ? (
-            <div className="rounded-lg border border-guava-green/25 bg-guava-green/5 px-3 py-3">
-              <p className="text-sm font-medium text-foreground">
-                Last CV health score:{" "}
-                <span className="font-mono text-guava-green">
-                  {profile.generalAtsAssessment.score}
-                </span>
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Industry:{" "}
-                {INDUSTRY_LABELS[profile.generalAtsAssessment.industry]}
-              </p>
-            </div>
-          ) : null}
         </PaperPanel>
+      ) : null}
+
+      {profile ? (
+        <ProfileAtsEasyRead
+          profileId={profile.id}
+          assessment={profile.generalAtsAssessment}
+          industry={industry}
+          cvParseStatus={parseStatus ?? profile.currentCv?.parseStatus ?? null}
+          cvUploadedAt={profile.currentCv?.uploadedAt ?? null}
+          hasCv={Boolean(profile.currentCv)}
+          getToken={getToken}
+          onAssessmentChange={(next) =>
+            setProfile((prev) =>
+              prev ? { ...prev, generalAtsAssessment: next } : prev,
+            )
+          }
+        />
       ) : null}
 
       <PaperPanel className="mt-6 space-y-3 border-destructive/20 p-5 md:p-6">

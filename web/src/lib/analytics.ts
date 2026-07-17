@@ -9,6 +9,7 @@ export const AnalyticsEvents = {
   cv_parse_succeeded: "cv_parse_succeeded",
   cv_parse_failed: "cv_parse_failed",
   profile_ats_viewed: "profile_ats_viewed",
+  profile_ats_rerun: "profile_ats_rerun",
   job_search: "job_search",
   job_detail_view: "job_detail_view",
   generate_started: "generate_started",

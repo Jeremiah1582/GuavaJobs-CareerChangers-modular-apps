@@ -54,6 +54,7 @@ export type ProfileAtsAssessment = {
   missingKeywords: string[];
   suggestions: string[];
   breakdown: Record<string, number>;
+  inputFingerprint?: string | null;
   assessedAt: string;
 };
 
