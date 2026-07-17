@@ -5,27 +5,22 @@ on:
     branches: [main]
     paths:
       - 'api/**'
-      - 'src/**'
-      - 'public/**'
+      - 'web/**'
       - 'package.json'
-      - 'package-lock.json'
-      - 'next.config.ts'
-      - 'tsconfig.json'
       - '.github/workflows/ci.yml'
   pull_request:
     paths:
       - 'api/**'
-      - 'src/**'
-      - 'public/**'
+      - 'web/**'
       - 'package.json'
-      - 'package-lock.json'
-      - 'next.config.ts'
-      - 'tsconfig.json'
       - '.github/workflows/ci.yml'
 
 jobs:
   web:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
     steps:
       - uses: actions/checkout@v4
 
@@ -33,7 +28,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: package-lock.json
+          cache-dependency-path: web/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -124,7 +119,6 @@ jobs:
       SUPABASE_JWKS_URL: https://placeholder.supabase.co/auth/v1/.well-known/jwks.json
       SUPABASE_SERVICE_ROLE_KEY: placeholder
       REDIS_URL: redis://localhost:6379
-      # Workers process AI jobs inside the same Nest process during e2e.
       RUN_BULLMQ_WORKERS: 'true'
     steps:
       - uses: actions/checkout@v4
@@ -145,6 +139,4 @@ jobs:
         run: npx prisma migrate deploy
 
       - name: Money-path e2e
-        # Use the package script — YAML/npm escaping of testPathPattern
-        # previously matched 0 tests (CI exit 1: "No tests found").
         run: npm run test:e2e:money

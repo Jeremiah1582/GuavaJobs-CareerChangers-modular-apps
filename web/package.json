@@ -1,0 +1,40 @@
+{
+  "name": "@guavajobs/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "api:types": "openapi-typescript \"${API_UPSTREAM:-http://n106xgrqkd5sxussrt8lq40k.46.224.155.225.sslip.io}/api/docs-json\" -o src/api/types.gen.ts"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^5.4.0",
+    "@phosphor-icons/react": "^2.1.10",
+    "@supabase/ssr": "^0.12.3",
+    "@supabase/supabase-js": "^2.110.6",
+    "@tanstack/react-query": "^5.101.2",
+    "framer-motion": "^12.42.2",
+    "geist": "^1.7.2",
+    "next": "15.3.4",
+    "posthog-js": "^1.402.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-hook-form": "^7.81.0",
+    "zod": "^4.4.3",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "15.3.4",
+    "openapi-typescript": "^7.13.0",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
