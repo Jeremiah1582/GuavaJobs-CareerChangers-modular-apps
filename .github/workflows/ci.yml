@@ -6,13 +6,11 @@ on:
     paths:
       - 'api/**'
       - 'web/**'
-      - 'package.json'
       - '.github/workflows/ci.yml'
   pull_request:
     paths:
       - 'api/**'
       - 'web/**'
-      - 'package.json'
       - '.github/workflows/ci.yml'
 
 jobs:
