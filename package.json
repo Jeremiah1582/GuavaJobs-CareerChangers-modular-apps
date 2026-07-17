@@ -1,0 +1,14 @@
+{
+  "name": "guavajobs",
+  "private": true,
+  "description": "Monorepo root — Vercel deploys the Next.js app in web/",
+  "scripts": {
+    "build": "npm run build --prefix web",
+    "dev": "npm run dev --prefix web",
+    "start": "npm run start --prefix web",
+    "lint": "npm run lint --prefix web"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

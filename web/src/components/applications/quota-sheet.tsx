@@ -46,8 +46,8 @@ export function QuotaSheet({
                 </h2>
                 <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                   You&apos;ve used this month&apos;s free AI packages. Browse
-                  jobs stays free — and you can still track applications
-                  manually (coming next).
+                  jobs stays free — and you can still add and track applications
+                  manually without using a credit.
                 </p>
               </div>
               <button
