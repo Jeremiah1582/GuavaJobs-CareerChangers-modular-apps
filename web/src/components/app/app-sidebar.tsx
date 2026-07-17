@@ -31,6 +31,11 @@ function isActive(pathname: string, href: string): boolean {
 const sidebarWash =
   "bg-gradient-to-b from-[oklch(0.74_0.16_12)] via-[oklch(0.64_0.19_12)] to-[oklch(0.52_0.17_18)]";
 
+/** Expanded rail widths scale with viewport (tablet → desktop). */
+const EXPANDED =
+  "w-[min(13.5rem,22vw)] md:w-[min(14rem,20vw)] lg:w-56 xl:w-60 2xl:w-64";
+const COLLAPSED = "w-14 md:w-16";
+
 export function AppSidebar() {
   const pathname = usePathname();
   const router = useRouter();
@@ -39,11 +44,36 @@ export function AppSidebar() {
 
   useEffect(() => {
     try {
-      setCollapsed(localStorage.getItem(STORAGE_KEY) === "1");
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored === "1" || stored === "0") {
+        setCollapsed(stored === "1");
+      } else {
+        // Default: collapsed on tablet, expanded on large desktop
+        const preferCollapsed =
+          typeof window !== "undefined" &&
+          window.matchMedia("(max-width: 1023px)").matches;
+        setCollapsed(preferCollapsed);
+      }
     } catch {
       /* ignore */
     }
     setReady(true);
+  }, []);
+
+  // Keep preference in sync when crossing tablet/desktop without a stored override
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 1023px)");
+    function onChange(e: MediaQueryListEvent) {
+      try {
+        if (localStorage.getItem(STORAGE_KEY) != null) return;
+      } catch {
+        /* ignore */
+      }
+      setCollapsed(e.matches);
+      window.dispatchEvent(new Event("gj-sidebar-toggle"));
+    }
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
   }, []);
 
   function toggle() {
@@ -76,33 +106,32 @@ export function AppSidebar() {
         "fixed inset-y-0 left-0 z-40 hidden flex-col text-white shadow-[8px_0_40px_-20px_color-mix(in_oklab,var(--guava-pink)_55%,transparent)] sm:flex",
         sidebarWash,
         "transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
-        collapsed ? "w-[4.5rem]" : "w-60",
+        collapsed ? COLLAPSED : EXPANDED,
         ready ? "opacity-100" : "opacity-0",
       ].join(" ")}
       aria-label="Main"
       data-collapsed={collapsed ? "true" : "false"}
     >
-      {/* Soft sheen */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-[linear-gradient(160deg,oklch(1_0_0_/_0.18)_0%,transparent_42%,oklch(0_0_0_/_0.08)_100%)]"
       />
 
-      <div className="relative flex h-full flex-col px-3 py-5">
+      <div className="relative flex h-full flex-col px-2 py-4 md:px-3 md:py-5">
         <Link
           href="/app"
           className={[
-            "mb-8 flex items-center gap-2.5 rounded-xl px-2 py-2 outline-none transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/50",
+            "mb-6 flex items-center gap-2.5 rounded-xl px-2 py-2 outline-none transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/50 md:mb-8",
             collapsed ? "justify-center px-0" : "",
           ].join(" ")}
           aria-label="GuavaJobs home"
         >
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/20 text-sm font-semibold tracking-tight shadow-inner backdrop-blur-sm">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-white/20 text-sm font-semibold tracking-tight shadow-inner backdrop-blur-sm md:size-9">
             G
           </span>
           <span
             className={[
-              "overflow-hidden whitespace-nowrap text-base font-semibold tracking-tight transition-[opacity,transform] duration-300",
+              "overflow-hidden whitespace-nowrap text-sm font-semibold tracking-tight transition-[opacity,transform] duration-300 md:text-base",
               collapsed
                 ? "w-0 translate-x-1 opacity-0"
                 : "w-auto translate-x-0 opacity-100",
@@ -122,7 +151,7 @@ export function AppSidebar() {
                 title={collapsed ? label : undefined}
                 aria-current={active ? "page" : undefined}
                 className={[
-                  "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-[background-color,transform] duration-200 active:scale-[0.98]",
+                  "group relative flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-sm font-medium transition-[background-color,transform] duration-200 active:scale-[0.98] md:gap-3 md:px-3 md:py-2.5",
                   collapsed ? "justify-center px-0" : "",
                   active
                     ? "bg-white/22 text-white shadow-[inset_0_1px_0_oklch(1_0_0_/_0.2)]"
@@ -132,7 +161,7 @@ export function AppSidebar() {
                 {active ? (
                   <span
                     aria-hidden
-                    className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-white"
+                    className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-white md:h-6"
                   />
                 ) : null}
                 <Icon
@@ -154,13 +183,13 @@ export function AppSidebar() {
           })}
         </nav>
 
-        <div className="mt-auto flex flex-col gap-1 border-t border-white/15 pt-4">
+        <div className="mt-auto flex flex-col gap-1 border-t border-white/15 pt-3 md:pt-4">
           <button
             type="button"
             onClick={onSignOut}
             title={collapsed ? "Sign out" : undefined}
             className={[
-              "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-white/85 transition-colors hover:bg-white/12 hover:text-white active:scale-[0.98]",
+              "flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-sm font-medium text-white/85 transition-colors hover:bg-white/12 hover:text-white active:scale-[0.98] md:gap-3 md:px-3 md:py-2.5",
               collapsed ? "justify-center px-0" : "",
             ].join(" ")}
           >
@@ -183,7 +212,7 @@ export function AppSidebar() {
             aria-expanded={!collapsed}
             aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
             className={[
-              "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-white/75 transition-colors hover:bg-white/12 hover:text-white active:scale-[0.98]",
+              "flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-sm font-medium text-white/75 transition-colors hover:bg-white/12 hover:text-white active:scale-[0.98] md:gap-3 md:px-3 md:py-2.5",
               collapsed ? "justify-center px-0" : "",
             ].join(" ")}
           >
@@ -216,28 +245,34 @@ export function AppSidebarSpacer() {
   useEffect(() => {
     function sync() {
       try {
-        setCollapsed(localStorage.getItem(STORAGE_KEY) === "1");
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored === "1" || stored === "0") {
+          setCollapsed(stored === "1");
+          return;
+        }
+        setCollapsed(window.matchMedia("(max-width: 1023px)").matches);
       } catch {
         /* ignore */
       }
     }
     sync();
     window.addEventListener("storage", sync);
-    // Same-tab updates: listen to a custom event from toggle
     window.addEventListener("gj-sidebar-toggle", sync);
+    const mq = window.matchMedia("(max-width: 1023px)");
+    mq.addEventListener("change", sync);
     return () => {
       window.removeEventListener("storage", sync);
       window.removeEventListener("gj-sidebar-toggle", sync);
+      mq.removeEventListener("change", sync);
     };
   }, []);
 
-  // Poll lightly isn't ideal — dispatch event from toggle instead
   return (
     <div
       aria-hidden
       className={[
         "hidden shrink-0 transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] sm:block",
-        collapsed ? "w-[4.5rem]" : "w-60",
+        collapsed ? COLLAPSED : EXPANDED,
       ].join(" ")}
       data-collapsed={collapsed ? "true" : "false"}
     />

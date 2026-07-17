@@ -13,6 +13,8 @@ import {
   AppSidebar,
   AppSidebarSpacer,
 } from "@/components/app/app-sidebar";
+import { OfflineBanner } from "@/components/ui/state-panel";
+import { useOnlineStatus } from "@/lib/online";
 
 const links = [
   { href: "/app/jobs", label: "Jobs", icon: Briefcase },
@@ -31,6 +33,7 @@ function isActive(pathname: string, href: string): boolean {
  */
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const online = useOnlineStatus();
 
   return (
     <div
@@ -41,6 +44,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <AppSidebarSpacer />
 
       <div className="flex min-w-0 flex-1 flex-col">
+        <OfflineBanner online={online} />
+
         {/* Phone-only top bar */}
         <header className="sticky top-0 z-40 border-b border-guava-green/10 bg-white/80 backdrop-blur-md sm:hidden">
           <div className="flex items-center justify-between gap-4 px-4 py-3">

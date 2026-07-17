@@ -1,5 +1,6 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Public } from '../common/decorators/public.decorator';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import {
   jobSearchQuerySchema,
@@ -13,6 +14,7 @@ import { JobsService } from './jobs.service';
 export class JobsController {
   constructor(private readonly jobsService: JobsService) {}
 
+  @Public()
   @Get('search')
   @ApiOperation({ summary: 'Search jobs via Adzuna with ATS enrichment' })
   search(
@@ -21,6 +23,7 @@ export class JobsController {
     return this.jobsService.search(query);
   }
 
+  @Public()
   @Get(':canonicalKey')
   @ApiOperation({
     summary:

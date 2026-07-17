@@ -38,6 +38,14 @@ export class ApplicationGenerateService {
       );
       if (existingId) {
         const existing = await this.getOwnedApplication(userId, existingId);
+        if (this.isStuckGeneration(existing)) {
+          await this.requeueStuck(userId, existing.id, 'generate');
+          const refreshed = await this.getOwnedApplication(userId, existing.id);
+          return {
+            statusCode: 202 as const,
+            body: toApplicationResponse(refreshed),
+          };
+        }
         return { statusCode: 202 as const, body: toApplicationResponse(existing) };
       }
     }
@@ -63,6 +71,43 @@ export class ApplicationGenerateService {
       include: { atsReport: true },
     });
     if (duplicate) {
+      // Stuck PENDING/PROCESSING (worker down / Redis / LLM) — re-enqueue without a new row.
+      if (this.isStuckGeneration(duplicate)) {
+        await this.requeueStuck(userId, duplicate.id, 'generate');
+        const refreshed = await this.getOwnedApplication(userId, duplicate.id);
+        return {
+          statusCode: 202 as const,
+          body: toApplicationResponse(refreshed),
+        };
+      }
+      // Tracker row saved from a public listing (MANUAL, no AI yet) — upgrade in place.
+      if (
+        duplicate.generationMode === ApplicationGenerationMode.MANUAL &&
+        duplicate.generationStatus == null
+      ) {
+        const upgraded = await this.prisma.application.update({
+          where: { id: duplicate.id },
+          data: {
+            profileId: input.profileId,
+            generationMode: ApplicationGenerationMode.AI,
+            generationStatus: ApplicationGenerationStatus.PENDING,
+            generationError: null,
+          },
+          include: { atsReport: true },
+        });
+        if (idempotencyKey) {
+          await this.idempotency.bind(userId, idempotencyKey, upgraded.id);
+        }
+        await this.enqueue({
+          type: 'generate',
+          applicationId: upgraded.id,
+          userId,
+        });
+        return {
+          statusCode: 202 as const,
+          body: toApplicationResponse(upgraded),
+        };
+      }
       return { statusCode: 200 as const, body: toApplicationResponse(duplicate) };
     }
 
@@ -92,8 +137,6 @@ export class ApplicationGenerateService {
   }
 
   async regenerate(userId: string, applicationId: string) {
-    await this.usage.assertCanGenerateAi(userId);
-
     const app = await this.getOwnedApplication(userId, applicationId);
     if (app.generationMode !== ApplicationGenerationMode.AI) {
       throw new AppError(
@@ -101,6 +144,15 @@ export class ApplicationGenerateService {
         'Regenerate is only for AI applications',
         400,
       );
+    }
+
+    const stuck =
+      app.generationStatus === ApplicationGenerationStatus.PENDING ||
+      app.generationStatus === ApplicationGenerationStatus.PROCESSING;
+
+    // Re-queue of a stuck job must not consume another quota credit.
+    if (!stuck) {
+      await this.usage.assertCanGenerateAi(userId);
     }
 
     await this.prisma.application.update({
@@ -112,13 +164,45 @@ export class ApplicationGenerateService {
     });
 
     await this.enqueue({
-      type: 'regenerate',
+      type: stuck ? 'generate' : 'regenerate',
       applicationId,
       userId,
     });
 
     const updated = await this.getOwnedApplication(userId, applicationId);
     return toApplicationResponse(updated);
+  }
+
+  /** Pending/processing with no progress for STUCK_MS → worker likely never ran. */
+  private isStuckGeneration(app: {
+    generationStatus: ApplicationGenerationStatus | null;
+    updatedAt: Date;
+  }): boolean {
+    if (
+      app.generationStatus !== ApplicationGenerationStatus.PENDING &&
+      app.generationStatus !== ApplicationGenerationStatus.PROCESSING
+    ) {
+      return false;
+    }
+    const ageMs = Date.now() - app.updatedAt.getTime();
+    return ageMs >= ApplicationGenerateService.STUCK_MS;
+  }
+
+  private static readonly STUCK_MS = 30_000;
+
+  private async requeueStuck(
+    userId: string,
+    applicationId: string,
+    type: AiGenerationJobData['type'],
+  ): Promise<void> {
+    await this.prisma.application.update({
+      where: { id: applicationId },
+      data: {
+        generationStatus: ApplicationGenerationStatus.PENDING,
+        generationError: null,
+      },
+    });
+    await this.enqueue({ type, applicationId, userId });
   }
 
   private async enqueue(data: AiGenerationJobData): Promise<void> {

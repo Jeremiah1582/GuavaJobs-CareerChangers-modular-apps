@@ -133,7 +133,7 @@ export function GenerateCta({
             }
             generateMutation.mutate();
           }}
-          className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-[transform,opacity] hover:opacity-90 active:scale-[0.98] disabled:opacity-50"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-[transform,opacity] hover:opacity-90 active:scale-[0.98] disabled:opacity-50 sm:w-auto"
         >
           {generateMutation.isPending ? (
             <CircleNotch className="size-4 animate-spin" weight="bold" />

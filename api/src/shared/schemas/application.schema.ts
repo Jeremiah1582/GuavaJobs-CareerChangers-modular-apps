@@ -95,26 +95,38 @@ export const applicationResponseSchema = z.object({
   updatedAt: z.string().datetime(),
 });
 
-export const createManualApplicationSchema = z.object({
-  profileId: z.string().min(1),
-  companyName: z.string().min(1).max(200),
-  jobRoleTitle: z.string().min(1).max(200),
-  jobLocation: z.string().max(200).optional(),
-  jobWebsite: z.string().url().optional(),
-  industry: z.string().max(200).optional(),
-  sourceOfListing: z.string().max(200).optional(),
-  languageRequired: z.array(z.string()).optional(),
-  jobStartDate: z.string().datetime().optional(),
-  jobSalaryMin: z.number().int().positive().optional(),
-  jobSalaryMax: z.number().int().positive().optional(),
-  jobSalaryCurrency: z.string().length(3).optional(),
-  jobSalaryPeriod: salaryPeriodSchema.optional(),
-  jobSalaryRaw: z.string().max(200).optional(),
-  userFitRating: z.number().int().min(0).max(100).optional(),
-  applyUrl: z.string().url().optional(),
-  pastedJobDescription: z.string().max(50_000).optional(),
-  status: applicationStatusSchema.optional(),
-});
+export const createManualApplicationSchema = z
+  .object({
+    profileId: z.string().min(1),
+    companyName: z.string().min(1).max(200).optional(),
+    jobRoleTitle: z.string().min(1).max(200).optional(),
+    jobLocation: z.string().max(200).optional(),
+    jobWebsite: z.string().url().optional(),
+    industry: z.string().max(200).optional(),
+    sourceOfListing: z.string().max(200).optional(),
+    languageRequired: z.array(z.string()).optional(),
+    jobStartDate: z.string().datetime().optional(),
+    jobSalaryMin: z.number().int().positive().optional(),
+    jobSalaryMax: z.number().int().positive().optional(),
+    jobSalaryCurrency: z.string().length(3).optional(),
+    jobSalaryPeriod: salaryPeriodSchema.optional(),
+    jobSalaryRaw: z.string().max(200).optional(),
+    userFitRating: z.number().int().min(0).max(100).optional(),
+    applyUrl: z.string().url().optional(),
+    pastedJobDescription: z.string().max(50_000).optional(),
+    /** Links a tracker row to a browsed listing for later Generate (no AI credit on create). */
+    canonicalJobKey: z.string().min(1).max(500).optional(),
+    status: applicationStatusSchema.optional(),
+  })
+  .refine(
+    (data) =>
+      data.canonicalJobKey != null ||
+      (data.companyName != null && data.jobRoleTitle != null),
+    {
+      message:
+        'companyName and jobRoleTitle are required without canonicalJobKey',
+    },
+  );
 
 export const generateApplicationSchema = z.object({
   profileId: z.string().min(1),

@@ -7,7 +7,8 @@ import { Plus } from "@phosphor-icons/react";
 import { apiFetch, ApiError } from "@/api/client";
 import type { ApplicationResponse, ApplicationStatus } from "@/api/types";
 import { StatusChip } from "@/components/applications/status-chip";
-import { PaperPanel, paperInputClass } from "@/components/ui/paper-panel";
+import { paperInputClass } from "@/components/ui/paper-panel";
+import { EmptyState, ErrorState } from "@/components/ui/state-panel";
 import {
   APPLICATION_STATUSES,
   STATUS_LABELS,
@@ -17,8 +18,10 @@ import {
   setHasApplicationsCookie,
 } from "@/lib/applications";
 import { getAccessToken } from "@/lib/session";
+import { useOnlineStatus } from "@/lib/online";
 
 export function TrackerList() {
+  const online = useOnlineStatus();
   const [statusFilter, setStatusFilter] = useState<ApplicationStatus | "">("");
   const [companyFilter, setCompanyFilter] = useState("");
   const [submitted, setSubmitted] = useState({
@@ -44,6 +47,7 @@ export function TrackerList() {
         { token },
       );
     },
+    enabled: online,
     staleTime: 15_000,
     retry: 1,
   });
@@ -122,40 +126,45 @@ export function TrackerList() {
             <div key={i} className="h-16 animate-pulse bg-muted/40" />
           ))}
         </div>
+      ) : !online ? (
+        <ErrorState
+          title="You're offline"
+          message="The tracker needs a network connection to load."
+          nextAction="Reconnect, then retry."
+          onRetry={() => void listQuery.refetch()}
+        />
       ) : listQuery.isError ? (
-        <PaperPanel className="border-destructive/30 p-6">
-          <p className="text-sm text-destructive" role="alert">
-            {listQuery.error instanceof ApiError
+        <ErrorState
+          title="Could not load applications"
+          message={
+            listQuery.error instanceof ApiError
               ? listQuery.error.message
-              : "Could not load applications."}
-          </p>
-          <p className="mt-2 text-xs text-muted-foreground">
-            Check your connection, then refresh.
-          </p>
-        </PaperPanel>
+              : "Could not load applications."
+          }
+          nextAction="Check your connection, then retry."
+          onRetry={() => void listQuery.refetch()}
+        />
       ) : apps.length === 0 ? (
-        <PaperPanel className="border-guava-green/20 p-8 text-center">
-          <h2 className="text-base font-semibold tracking-tight">
-            No applications yet
-          </h2>
-          <p className="mx-auto mt-2 max-w-[42ch] text-sm leading-relaxed text-muted-foreground">
-            Generate a package from Jobs, or log a role you already applied to.
-          </p>
-          <div className="mt-6 flex flex-wrap justify-center gap-3">
-            <Link
-              href="/app/jobs"
-              className="inline-flex rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground"
-            >
-              Browse jobs
-            </Link>
-            <Link
-              href="/app/applications/new"
-              className="inline-flex rounded-xl border border-guava-green/25 bg-white px-4 py-2.5 text-sm font-medium"
-            >
-              Add manually
-            </Link>
-          </div>
-        </PaperPanel>
+        <EmptyState
+          title="No applications yet"
+          body="Generate a package from Jobs, or log a role you already applied to."
+          action={
+            <>
+              <Link
+                href="/app/jobs"
+                className="inline-flex rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground"
+              >
+                Browse jobs
+              </Link>
+              <Link
+                href="/app/applications/new"
+                className="inline-flex rounded-xl border border-guava-green/25 bg-white px-4 py-2.5 text-sm font-medium"
+              >
+                Add manually
+              </Link>
+            </>
+          }
+        />
       ) : (
         <div className="overflow-hidden rounded-2xl border border-guava-green/15 bg-white/70">
           <ul className="divide-y divide-guava-green/10">

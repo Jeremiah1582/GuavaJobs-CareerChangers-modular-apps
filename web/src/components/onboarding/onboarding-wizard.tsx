@@ -26,6 +26,12 @@ import {
 } from "@/lib/onboarding";
 import { getAccessToken } from "@/lib/session";
 import { AnalyticsEvents, track } from "@/lib/analytics";
+import {
+  clearPendingJobCookie,
+  getPendingJobCookie,
+} from "@/lib/pending-job";
+import { setHasApplicationsCookie } from "@/lib/applications";
+import type { ApplicationResponse } from "@/api/types";
 
 const spring = { type: "spring" as const, stiffness: 120, damping: 20 };
 
@@ -309,10 +315,44 @@ export function OnboardingWizard() {
     }
   }
 
-  function finish() {
+  async function finish() {
     markOnboardingComplete();
-    router.replace("/app/jobs");
-    router.refresh();
+    const pendingKey = getPendingJobCookie();
+
+    if (!pendingKey) {
+      router.replace("/app/jobs");
+      router.refresh();
+      return;
+    }
+
+    try {
+      const token = await getAccessToken();
+      const meRes = me ?? (await apiFetch<MeResponse>("/me", { token }));
+      if (!meRes.defaultProfileId) {
+        throw new Error("No default profile");
+      }
+
+      const app = await apiFetch<ApplicationResponse>("/applications", {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          profileId: meRes.defaultProfileId,
+          canonicalJobKey: pendingKey,
+        }),
+      });
+
+      clearPendingJobCookie();
+      setHasApplicationsCookie(true);
+      router.replace(`/app/applications/${app.id}`);
+      router.refresh();
+    } catch {
+      const fallbackKey = pendingKey;
+      clearPendingJobCookie();
+      router.replace(
+        `/app/jobs?job=${encodeURIComponent(fallbackKey)}`,
+      );
+      router.refresh();
+    }
   }
 
   if (loading) {

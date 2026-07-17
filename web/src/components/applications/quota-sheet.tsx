@@ -4,6 +4,7 @@ import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { X } from "@phosphor-icons/react";
 
+/** Freemium AI cap reached — browsing + manual tracker stay free (no payments in v1). */
 export function QuotaSheet({
   open,
   onClose,
@@ -45,9 +46,12 @@ export function QuotaSheet({
                   Free AI generations used up
                 </h2>
                 <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                  You&apos;ve used this month&apos;s free AI packages. Browse
-                  jobs stays free — and you can still track applications
-                  manually (coming next).
+                  You&apos;ve used this month&apos;s free AI packages. Job browse
+                  stays free, and you can still{" "}
+                  <strong className="font-medium text-foreground">
+                    log applications manually
+                  </strong>{" "}
+                  with no AI cost. Paid plans ship after beta.
                 </p>
               </div>
               <button
@@ -62,19 +66,19 @@ export function QuotaSheet({
 
             <div className="mt-6 flex flex-col gap-2 sm:flex-row">
               <Link
-                href="/app/applications"
+                href="/app/applications/new"
                 className="inline-flex flex-1 items-center justify-center rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-[transform,opacity] hover:opacity-90 active:scale-[0.98]"
                 onClick={onClose}
               >
-                Go to applications
+                Add manually
               </Link>
-              <button
-                type="button"
-                onClick={onClose}
+              <Link
+                href="/app/jobs"
                 className="inline-flex flex-1 items-center justify-center rounded-xl border border-guava-green/25 bg-white px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:border-guava-green/45"
+                onClick={onClose}
               >
                 Keep browsing
-              </button>
+              </Link>
             </div>
           </motion.div>
         </motion.div>

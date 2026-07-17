@@ -1,18 +1,18 @@
 import { LandingFooter } from "@/components/marketing/landing-footer";
 import { LandingHeader } from "@/components/marketing/landing-header";
 import { SoftwareApplicationJsonLd } from "@/components/marketing/json-ld";
-import { HeroLine, HeroMotion, SoftOrb } from "@/components/marketing/hero-motion";
+import { SoftOrb } from "@/components/marketing/hero-motion";
 import { HeroStage } from "@/components/marketing/hero-stage";
+import { HeroJobSearch } from "@/components/marketing/hero-job-search";
 import {
   ClosingSection,
   FreemiumSection,
+  HonestyStripSection,
   ListingsSection,
   LoopSection,
   ProblemSection,
 } from "@/components/marketing/landing-sections";
 import { SectionFrame } from "@/components/marketing/section-frame";
-import { GreenPulseMark } from "@/components/marketing/illustrations";
-import { SpringCta } from "@/components/marketing/spring-cta";
 import type { LoopItem } from "@/components/marketing/loop-rail";
 import type { Metadata } from "next";
 
@@ -63,41 +63,15 @@ export default function HomePage() {
             <LandingHeader />
             <div className="mt-4 md:mt-6">
               <HeroStage>
-                <HeroMotion>
-                  <HeroLine>
-                    <p className="inline-flex items-center justify-center gap-2 text-sm font-medium tracking-wide text-guava-pink">
-                      Honest applications, less busywork
-                      <GreenPulseMark />
-                    </p>
-                  </HeroLine>
-                  <HeroLine>
-                    <h1 className="text-balance text-3xl font-semibold tracking-tight text-foreground md:text-5xl md:leading-[1.08]">
-                      Apply with a tailored letter without inventing your past.
-                    </h1>
-                  </HeroLine>
-                  <HeroLine>
-                    <p className="mx-auto max-w-[36ch] text-base leading-relaxed text-muted-foreground md:max-w-[42ch]">
-                      Find roles that fit your skills. Apply less. Improve every
-                      package with honest{" "}
-                      <span className="font-medium text-guava-green">fit</span>{" "}
-                      insights.
-                    </p>
-                  </HeroLine>
-                  <HeroLine>
-                    <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
-                      <SpringCta href="/sign-up" variant="pink" withArrow>
-                        Get started
-                      </SpringCta>
-                      <SpringCta href="/sign-in" variant="ghost">
-                        I already have an account
-                      </SpringCta>
-                    </div>
-                  </HeroLine>
-                </HeroMotion>
+                <HeroJobSearch />
               </HeroStage>
             </div>
           </div>
         </section>
+
+        <SectionFrame wash="pink" borderTone="pink">
+          <HonestyStripSection />
+        </SectionFrame>
 
         <SectionFrame wash="mint" borderTone="green" orbs>
           <ProblemSection />

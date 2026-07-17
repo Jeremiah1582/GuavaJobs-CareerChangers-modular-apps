@@ -185,8 +185,9 @@ export type ApplicationResponse = {
 
 export type CreateManualApplicationBody = {
   profileId: string;
-  companyName: string;
-  jobRoleTitle: string;
+  canonicalJobKey?: string;
+  companyName?: string;
+  jobRoleTitle?: string;
   jobLocation?: string;
   jobWebsite?: string;
   industry?: string;

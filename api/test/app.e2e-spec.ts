@@ -44,6 +44,22 @@ describe('GuavaJobs API (e2e)', () => {
     });
   });
 
+  describe('Public jobs', () => {
+    it('allows unauthenticated job search', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/api/v1/jobs/search?q=developer&country=gb&page=1');
+
+      if (res.status === 503) {
+        // Adzuna not configured in CI/local — still proves auth is not required
+        expect(res.body.error?.code).toBe('JOBS_NOT_CONFIGURED');
+        return;
+      }
+
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body.results)).toBe(true);
+    });
+  });
+
   describe('Validation', () => {
     it('rejects invalid profile body with 400', async () => {
       const token = await getSeedToken();

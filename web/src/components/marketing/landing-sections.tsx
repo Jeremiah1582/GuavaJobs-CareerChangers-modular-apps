@@ -40,6 +40,27 @@ function FloatLayer({
   );
 }
 
+/** Below-fold honesty messaging moved from hero. */
+export function HonestyStripSection() {
+  return (
+    <div className="mx-auto max-w-3xl px-4 py-16 text-center md:px-6 md:py-20">
+      <Reveal>
+        <p className="text-sm font-medium tracking-wide text-guava-pink">
+          Honest applications, less busywork
+        </p>
+        <h2 className="mt-3 text-balance text-2xl font-semibold tracking-tight md:text-4xl md:leading-[1.08]">
+          Apply with a tailored letter without inventing your past.
+        </h2>
+        <p className="mx-auto mt-5 max-w-[42ch] text-base leading-relaxed text-muted-foreground">
+          Find roles that fit your skills. Apply less. Improve every package
+          with honest{" "}
+          <span className="font-medium text-guava-green">fit</span> insights.
+        </p>
+      </Reveal>
+    </div>
+  );
+}
+
 /** Problem: honest stack vs generic hype — paper diorama. */
 export function ProblemSection() {
   const reduce = useReducedMotion();

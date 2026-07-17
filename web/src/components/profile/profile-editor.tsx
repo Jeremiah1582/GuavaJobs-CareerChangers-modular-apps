@@ -16,11 +16,14 @@ import type {
 } from "@/api/types";
 import { AnalyticsEvents, track } from "@/lib/analytics";
 import { AppPageShell } from "@/components/app/app-page-shell";
+import { FreemiumLimitCard } from "@/components/app/freemium-limit-card";
 import { QuotaChip } from "@/components/app/quota-chip";
 import {
   PaperPanel,
   paperInputClass,
 } from "@/components/ui/paper-panel";
+import { ErrorState } from "@/components/ui/state-panel";
+import Link from "next/link";
 import {
   INDUSTRY_LABELS,
   PROFILE_INDUSTRIES,
@@ -359,9 +362,13 @@ export function ProfileEditor() {
   if (loadError && !me) {
     return (
       <AppPageShell title="Profile">
-        <p className="text-sm text-destructive" role="alert">
-          {loadError}. Check that the API is reachable and CORS is deployed.
-        </p>
+        <ErrorState
+          title="Could not load profile"
+          message={loadError}
+          nextAction="Check that the API is reachable, then retry."
+          onRetry={() => window.location.reload()}
+          retryLabel="Reload"
+        />
       </AppPageShell>
     );
   }
@@ -380,9 +387,18 @@ export function ProfileEditor() {
       }
     >
       {loadError ? (
-        <p className="text-sm text-destructive" role="alert">
+        <p className="mb-4 text-sm text-destructive" role="alert">
           {loadError}
         </p>
+      ) : null}
+
+      {me ? (
+        <div className="mb-6">
+          <FreemiumLimitCard
+            used={me.usage.aiGenerationsUsedPeriod}
+            limit={me.usage.aiGenerationsLimit}
+          />
+        </div>
       ) : null}
 
       <form onSubmit={saveAccount} className="space-y-4">
@@ -675,6 +691,35 @@ export function ProfileEditor() {
           ) : null}
         </PaperPanel>
       ) : null}
+
+      <PaperPanel className="mt-6 space-y-3 border-destructive/20 p-5 md:p-6">
+        <h2 className="text-base font-semibold tracking-tight">
+          Account deletion
+        </h2>
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          Self-serve delete is not live yet. Request removal of your account,
+          CVs, and applications by emailing from this account address. See{" "}
+          <Link
+            href="/privacy"
+            className="font-medium text-guava-pink underline-offset-2 hover:underline"
+          >
+            Privacy
+          </Link>{" "}
+          for retention details.
+        </p>
+        <a
+          href={`mailto:privacy@guavajobs.app?subject=${encodeURIComponent(
+            "Account deletion request",
+          )}&body=${encodeURIComponent(
+            me
+              ? `Please delete my GuavaJobs account.\n\nEmail: ${me.email}\nUser id: ${me.id}\n`
+              : "Please delete my GuavaJobs account.\n",
+          )}`}
+          className="inline-flex rounded-xl border border-destructive/30 bg-white px-4 py-2.5 text-sm font-medium text-destructive transition-colors hover:bg-destructive/5"
+        >
+          Email deletion request
+        </a>
+      </PaperPanel>
     </AppPageShell>
   );
 }

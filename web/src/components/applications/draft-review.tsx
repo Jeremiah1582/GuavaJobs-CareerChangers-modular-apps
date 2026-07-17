@@ -18,6 +18,7 @@ import {
 import { ApplyPanel } from "@/components/applications/apply-panel";
 import { AtsReportPanel } from "@/components/applications/ats-report-panel";
 import { CoverLetterEditor } from "@/components/applications/cover-letter-editor";
+import { GenerateCta } from "@/components/applications/generate-cta";
 import { HybridAiPanel } from "@/components/applications/hybrid-ai-panel";
 import { QuotaSheet } from "@/components/applications/quota-sheet";
 import { StatusAndEvents } from "@/components/applications/status-and-events";
@@ -31,7 +32,17 @@ import {
 } from "@/lib/applications";
 import { getAccessToken } from "@/lib/session";
 
-function GeneratingState({ status }: { status: string }) {
+function GeneratingState({
+  status,
+  stuck,
+  onRetry,
+  retrying,
+}: {
+  status: string;
+  stuck: boolean;
+  onRetry: () => void;
+  retrying: boolean;
+}) {
   return (
     <PaperPanel className="border-guava-green/20 p-8 text-center md:p-12">
       <span className="relative mx-auto flex size-3">
@@ -39,15 +50,31 @@ function GeneratingState({ status }: { status: string }) {
         <span className="relative inline-flex size-3 rounded-full bg-guava-pink" />
       </span>
       <h2 className="mt-5 text-lg font-semibold tracking-tight">
-        Building your package
+        {stuck ? "Still waiting on generation" : "Building your package"}
       </h2>
       <p className="mx-auto mt-2 max-w-[40ch] text-sm leading-relaxed text-muted-foreground">
-        Cover letter and fit report are generating from your profile and CV.
-        This usually takes under a minute.
+        {stuck
+          ? "This is taking longer than usual. The worker may have missed the job. Retry re-queues without using an extra credit while status is still pending."
+          : "Cover letter and fit report are generating from your profile and CV. This usually takes under a minute."}
       </p>
       <p className="mt-4 font-mono text-xs uppercase tracking-wide text-muted-foreground">
         {status}
       </p>
+      {stuck ? (
+        <button
+          type="button"
+          onClick={onRetry}
+          disabled={retrying}
+          className="mt-6 inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
+        >
+          {retrying ? (
+            <CircleNotch className="size-4 animate-spin" weight="bold" />
+          ) : (
+            <ArrowClockwise className="size-4" weight="bold" />
+          )}
+          Retry generation
+        </button>
+      ) : null}
     </PaperPanel>
   );
 }
@@ -130,6 +157,8 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
   const [quotaOpen, setQuotaOpen] = useState(false);
   const [regenOpen, setRegenOpen] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [generatingSince, setGeneratingSince] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
 
   const appQuery = useQuery({
     queryKey: ["application", applicationId] as const,
@@ -147,6 +176,24 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
   useEffect(() => {
     if (appQuery.data) setHasApplicationsCookie(true);
   }, [appQuery.data]);
+
+  useEffect(() => {
+    const status = appQuery.data?.generationStatus;
+    if (isGeneratingStatus(status)) {
+      setGeneratingSince((prev) => prev ?? Date.now());
+    } else {
+      setGeneratingSince(null);
+    }
+  }, [appQuery.data?.generationStatus, appQuery.data?.updatedAt]);
+
+  useEffect(() => {
+    if (generatingSince == null) return;
+    const id = window.setInterval(() => setNow(Date.now()), 2000);
+    return () => window.clearInterval(id);
+  }, [generatingSince]);
+
+  const stuckGenerating =
+    generatingSince != null && now - generatingSince >= 60_000;
 
   useEffect(() => {
     const app = appQuery.data;
@@ -221,12 +268,16 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
     onSuccess: (data) => {
       setRegenOpen(false);
       trackedTerminal.current = null;
+      setGeneratingSince(Date.now());
       queryClient.setQueryData(["application", applicationId], data);
       track(AnalyticsEvents.generate_started, {
         applicationId: data.id,
         mode: "regenerate",
       });
       void queryClient.invalidateQueries({ queryKey: ["me"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["application", applicationId],
+      });
     },
     onError: (err) => {
       setRegenOpen(false);
@@ -309,7 +360,12 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
           </div>
 
           {generating ? (
-            <GeneratingState status={app.generationStatus ?? "PENDING"} />
+            <GeneratingState
+              status={app.generationStatus ?? "PENDING"}
+              stuck={stuckGenerating}
+              retrying={regenMutation.isPending}
+              onRetry={() => regenMutation.mutate()}
+            />
           ) : null}
 
           {failed && isAi ? (
@@ -344,6 +400,21 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
 
           {!generating ? (
             <>
+              {isManual && app.canonicalJobKey ? (
+                <PaperPanel className="border-guava-pink/15 p-5 md:p-6">
+                  <p className="text-sm font-medium text-foreground">
+                    Generate application
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    This listing is saved in your tracker. Generate uses one AI
+                    credit and builds a letter plus fit notes from the job.
+                  </p>
+                  <div className="mt-4">
+                    <GenerateCta canonicalJobKey={app.canonicalJobKey} />
+                  </div>
+                </PaperPanel>
+              ) : null}
+
               {isManual ? <HybridAiPanel app={app} /> : null}
 
               {(showLetter || showAts) && (

@@ -6,6 +6,7 @@ import {
   ApplicationStatus,
 } from '@prisma/client';
 import { Queue } from 'bullmq';
+import { JobsService } from '../jobs/jobs.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AI_GENERATION_QUEUE, AiGenerationJobData } from '../queue/queue.constants';
 import { AppError } from '../shared/schemas/error.schema';
@@ -18,46 +19,95 @@ export class ApplicationManualService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly usage: UsageService,
+    private readonly jobs: JobsService,
     @InjectQueue(AI_GENERATION_QUEUE)
     private readonly aiQueue: Queue<AiGenerationJobData>,
   ) {}
 
-  create(userId: string, input: CreateManualApplicationInput) {
-    return this.prisma.profile
-      .findFirst({ where: { id: input.profileId, userId } })
-      .then((profile) => {
-        if (!profile) {
-          throw new AppError('PROFILE_NOT_FOUND', 'Profile not found', 404);
-        }
-        return this.prisma.application.create({
+  async create(userId: string, input: CreateManualApplicationInput) {
+    const profile = await this.prisma.profile.findFirst({
+      where: { id: input.profileId, userId },
+    });
+    if (!profile) {
+      throw new AppError('PROFILE_NOT_FOUND', 'Profile not found', 404);
+    }
+
+    if (input.canonicalJobKey) {
+      const canonicalJobKey = input.canonicalJobKey.toLowerCase();
+      const existing = await this.prisma.application.findFirst({
+        where: { userId, canonicalJobKey },
+        include: { atsReport: true },
+      });
+      if (existing) {
+        return toApplicationResponse(existing);
+      }
+
+      const job = await this.jobs.getByCanonicalKey(canonicalJobKey, {
+        expandAts: true,
+      });
+
+      const app = await this.prisma.application.create({
         data: {
           userId,
           profileId: input.profileId,
           status: input.status ?? ApplicationStatus.DRAFT,
           generationMode: ApplicationGenerationMode.MANUAL,
-          companyName: input.companyName,
-          jobRoleTitle: input.jobRoleTitle,
-          jobLocation: input.jobLocation,
-          jobWebsite: input.jobWebsite,
-          industry: input.industry,
-          sourceOfListing: input.sourceOfListing,
-          languageRequired: input.languageRequired ?? [],
-          jobStartDate: input.jobStartDate
-            ? new Date(input.jobStartDate)
-            : undefined,
-          jobSalaryMin: input.jobSalaryMin,
-          jobSalaryMax: input.jobSalaryMax,
-          jobSalaryCurrency: input.jobSalaryCurrency,
-          jobSalaryPeriod: input.jobSalaryPeriod,
-          jobSalaryRaw: input.jobSalaryRaw,
-          userFitRating: input.userFitRating,
-          applyUrl: input.applyUrl,
-          pastedJobDescription: input.pastedJobDescription,
+          canonicalJobKey,
+          companyName: job.company,
+          jobRoleTitle: job.title,
+          jobLocation: job.location ?? undefined,
+          applyUrl: job.applyUrl,
+          sourceOfListing:
+            input.sourceOfListing ??
+            (job.atsType === 'adzuna' ? 'Jobs by Adzuna' : job.atsType),
+          jobSalaryMin: job.salaryMin ?? undefined,
+          jobSalaryMax: job.salaryMax ?? undefined,
+          jobSalaryCurrency: job.salaryCurrency ?? undefined,
+          pastedJobDescription: job.description?.slice(0, 50_000) || undefined,
         },
         include: { atsReport: true },
       });
-      })
-      .then((app) => toApplicationResponse(app));
+
+      return toApplicationResponse(app);
+    }
+
+    if (!input.companyName || !input.jobRoleTitle) {
+      throw new AppError(
+        'VALIDATION_ERROR',
+        'companyName and jobRoleTitle are required',
+        400,
+      );
+    }
+
+    const app = await this.prisma.application.create({
+      data: {
+        userId,
+        profileId: input.profileId,
+        status: input.status ?? ApplicationStatus.DRAFT,
+        generationMode: ApplicationGenerationMode.MANUAL,
+        companyName: input.companyName,
+        jobRoleTitle: input.jobRoleTitle,
+        jobLocation: input.jobLocation,
+        jobWebsite: input.jobWebsite,
+        industry: input.industry,
+        sourceOfListing: input.sourceOfListing,
+        languageRequired: input.languageRequired ?? [],
+        jobStartDate: input.jobStartDate
+          ? new Date(input.jobStartDate)
+          : undefined,
+        jobSalaryMin: input.jobSalaryMin,
+        jobSalaryMax: input.jobSalaryMax,
+        jobSalaryCurrency: input.jobSalaryCurrency,
+        jobSalaryPeriod: input.jobSalaryPeriod,
+        jobSalaryRaw: input.jobSalaryRaw,
+        userFitRating: input.userFitRating,
+        applyUrl: input.applyUrl,
+        pastedJobDescription: input.pastedJobDescription,
+      },
+      include: { atsReport: true },
+    });
+
+    return toApplicationResponse(app);
   }
 
   async generateCoverLetter(

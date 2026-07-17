@@ -48,6 +48,14 @@ function resolveApiUrl(path: string): string {
   return relative;
 }
 
+/** Public endpoints (e.g. GET /jobs/search) — no Bearer required. */
+export async function publicApiFetch<T>(
+  path: string,
+  opts: RequestInit = {},
+): Promise<T> {
+  return apiFetch<T>(path, opts);
+}
+
 export async function apiFetch<T>(
   path: string,
   opts: RequestInit & { token?: string } = {},

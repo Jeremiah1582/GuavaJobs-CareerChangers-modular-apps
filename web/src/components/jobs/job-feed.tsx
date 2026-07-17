@@ -1,31 +1,36 @@
 "use client";
 
+import { useCallback, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { FormEvent, useState } from "react";
-import { apiFetch, ApiError } from "@/api/client";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { apiFetch, ApiError, publicApiFetch } from "@/api/client";
 import type { JobSearchResponse } from "@/api/types";
-import { JobCard } from "@/components/jobs/job-card";
-import { PaperPanel, paperInputClass } from "@/components/ui/paper-panel";
+import { JobsBoard } from "@/components/jobs/jobs-board";
+import { JobsSearchBar } from "@/components/jobs/jobs-search-bar";
+import { ErrorState } from "@/components/ui/state-panel";
 import { AnalyticsEvents, track } from "@/lib/analytics";
-import { getAccessToken } from "@/lib/session";
+import { useOnlineStatus } from "@/lib/online";
+import { getAccessTokenOrNull } from "@/lib/session";
 
-function FeedSkeleton() {
-  return (
-    <div className="space-y-4" aria-hidden>
-      {Array.from({ length: 4 }).map((_, i) => (
-        <div
-          key={i}
-          className="h-36 animate-pulse rounded-2xl border border-guava-green/10 bg-white/50"
-        />
-      ))}
-    </div>
-  );
-}
+type JobFeedProps = {
+  mode?: "app" | "public";
+};
 
-export function JobFeed() {
-  const [query, setQuery] = useState("");
-  const [location, setLocation] = useState("");
-  const [submitted, setSubmitted] = useState({ q: "", location: "", page: 1 });
+export function JobFeed({ mode = "app" }: JobFeedProps) {
+  const online = useOnlineStatus();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const selectedKey = searchParams.get("job");
+
+  const [query, setQuery] = useState(searchParams.get("q") ?? "");
+  const [location, setLocation] = useState(searchParams.get("where") ?? "");
+  const [submitted, setSubmitted] = useState({
+    q: searchParams.get("q") ?? "",
+    location: searchParams.get("where") ?? "",
+    page: Number(searchParams.get("page") ?? "1") || 1,
+  });
 
   const searchQuery = useQuery({
     queryKey: [
@@ -35,7 +40,6 @@ export function JobFeed() {
       submitted.page,
     ] as const,
     queryFn: async () => {
-      const token = await getAccessToken();
       const params = new URLSearchParams({
         country: "gb",
         page: String(submitted.page),
@@ -44,21 +48,66 @@ export function JobFeed() {
       if (submitted.location.trim())
         params.set("location", submitted.location.trim());
 
-      return apiFetch<JobSearchResponse>(`/jobs/search?${params}`, { token });
+      if (mode === "public") {
+        return publicApiFetch<JobSearchResponse>(`/jobs/search?${params}`);
+      }
+
+      const token = await getAccessTokenOrNull();
+      return apiFetch<JobSearchResponse>(`/jobs/search?${params}`, {
+        token: token ?? undefined,
+      });
     },
+    enabled: online,
     staleTime: 30_000,
     retry: 1,
   });
 
-  function onSearch(e: FormEvent) {
-    e.preventDefault();
-    setSubmitted({ q: query, location, page: 1 });
+  const syncUrl = useCallback(
+    (opts: {
+      q?: string;
+      location?: string;
+      page?: number;
+      job?: string | null;
+    }) => {
+      const params = new URLSearchParams();
+      const q = opts.q ?? submitted.q;
+      const loc = opts.location ?? submitted.location;
+      const page = opts.page ?? submitted.page;
+      const job =
+        opts.job === undefined ? selectedKey : opts.job;
+
+      if (q.trim()) params.set("q", q.trim());
+      if (loc.trim()) params.set("where", loc.trim());
+      if (page > 1) params.set("page", String(page));
+      if (job) params.set("job", job);
+
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [pathname, router, selectedKey, submitted.location, submitted.page, submitted.q],
+  );
+
+  function onSearch() {
+    const next = { q: query, location, page: 1 };
+    setSubmitted(next);
+    syncUrl({ ...next, job: null });
     track(AnalyticsEvents.job_search, {
       q: query.trim() || null,
       location: location.trim() || null,
       page: 1,
     });
   }
+
+  const selectJob = useCallback(
+    (canonicalKey: string) => {
+      syncUrl({ job: canonicalKey });
+    },
+    [syncUrl],
+  );
+
+  const clearSelection = useCallback(() => {
+    syncUrl({ job: null });
+  }, [syncUrl]);
 
   const data = searchQuery.data;
   const totalPages =
@@ -67,111 +116,101 @@ export function JobFeed() {
       : 1;
 
   return (
-    <div className="space-y-8">
-      <PaperPanel className="border-guava-pink/15 p-5 md:p-6">
-        <form onSubmit={onSearch} className="grid gap-4 md:grid-cols-[1fr_1fr_auto]">
-          <label className="flex flex-col gap-2 text-sm">
-            <span className="font-medium">Keywords</span>
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className={paperInputClass}
-              placeholder="e.g. product designer, TypeScript"
-            />
-          </label>
-          <label className="flex flex-col gap-2 text-sm">
-            <span className="font-medium">Location</span>
-            <input
-              type="search"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              className={paperInputClass}
-              placeholder="e.g. London, Remote"
-            />
-          </label>
-          <div className="flex items-end">
-            <button
-              type="submit"
-              className="w-full rounded-xl bg-gradient-to-br from-[oklch(0.68_0.13_150)] via-[oklch(0.58_0.16_150)] to-[oklch(0.48_0.13_155)] px-5 py-2.5 text-sm font-medium text-white shadow-[0_12px_32px_-12px_color-mix(in_oklab,var(--guava-green)_70%,transparent)] transition-[filter,transform] hover:brightness-[1.05] active:scale-[0.98] disabled:opacity-60 md:w-auto"
-              disabled={searchQuery.isFetching && !searchQuery.isFetched}
-            >
-              {searchQuery.isFetching ? "Searching…" : "Search jobs"}
-            </button>
-          </div>
-        </form>
-        <p className="mt-3 text-xs text-muted-foreground">
-          Default country: GB. Results may include listings powered by Adzuna.
-        </p>
-      </PaperPanel>
+    <div className="flex min-h-0 flex-col gap-5">
+      <JobsSearchBar
+        query={query}
+        location={location}
+        onQueryChange={setQuery}
+        onLocationChange={setLocation}
+        onSubmit={onSearch}
+        pending={searchQuery.isFetching && !searchQuery.isFetched}
+      />
 
-      {searchQuery.isLoading ? (
-        <FeedSkeleton />
+      {!online ? (
+        <ErrorState
+          title="You're offline"
+          message="Job search needs a network connection."
+          nextAction="Reconnect, then retry search."
+          onRetry={() => void searchQuery.refetch()}
+        />
       ) : searchQuery.isError ? (
-        <PaperPanel className="border-destructive/30 p-6">
-          <p className="text-sm text-destructive" role="alert">
-            {searchQuery.error instanceof ApiError
+        <ErrorState
+          title="Search failed"
+          message={
+            searchQuery.error instanceof ApiError
               ? searchQuery.error.message
-              : "Search failed. Try again."}
-          </p>
-          {searchQuery.error instanceof ApiError &&
-          searchQuery.error.code === "JOBS_NOT_CONFIGURED" ? (
-            <p className="mt-2 text-xs text-muted-foreground">
-              The API needs ADZUNA_APP_ID and ADZUNA_API_KEY on Coolify.
-            </p>
-          ) : null}
-        </PaperPanel>
-      ) : data?.results.length === 0 ? (
-        <PaperPanel className="border-guava-green/15 p-6 text-center">
-          <p className="text-sm text-muted-foreground">
-            No roles matched. Try broader keywords or a different location.
-          </p>
-        </PaperPanel>
+              : "Search failed. Try again."
+          }
+          nextAction={
+            searchQuery.error instanceof ApiError &&
+            searchQuery.error.code === "JOBS_NOT_CONFIGURED"
+              ? "The API needs ADZUNA_APP_ID and ADZUNA_API_KEY on Coolify."
+              : "Check your connection, broaden keywords, or try again."
+          }
+          onRetry={() => void searchQuery.refetch()}
+        />
       ) : (
         <>
-          <p className="text-sm text-muted-foreground">
-            {data!.totalResults.toLocaleString()} results
-            {data!.page > 1 ? ` · page ${data!.page}` : ""}
-          </p>
-          <ul className="space-y-4">
-            {data!.results.map((job) => (
-              <li key={job.canonicalKey}>
-                <JobCard job={job} />
-              </li>
-            ))}
-          </ul>
+          {data && data.results.length > 0 ? (
+            <p className="text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">
+                {data.totalResults.toLocaleString()}
+              </span>{" "}
+              {data.totalResults === 1 ? "job" : "jobs"}
+              {submitted.q.trim() ? ` matching “${submitted.q.trim()}”` : ""}
+              {submitted.location.trim()
+                ? ` in ${submitted.location.trim()}`
+                : ""}
+            </p>
+          ) : null}
 
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <button
-              type="button"
-              disabled={submitted.page <= 1 || searchQuery.isFetching}
-              onClick={() =>
-                setSubmitted((s) => ({ ...s, page: Math.max(1, s.page - 1) }))
-              }
-              className="rounded-xl border border-guava-green/25 bg-white/70 px-4 py-2 text-sm font-medium disabled:opacity-40"
-            >
-              Previous
-            </button>
-            <span className="font-mono text-xs text-muted-foreground">
-              {submitted.page} / {totalPages}
-            </span>
-            <button
-              type="button"
-              disabled={
-                submitted.page >= totalPages || searchQuery.isFetching
-              }
-              onClick={() =>
-                setSubmitted((s) => ({ ...s, page: s.page + 1 }))
-              }
-              className="rounded-xl border border-guava-green/25 bg-white/70 px-4 py-2 text-sm font-medium disabled:opacity-40"
-            >
-              Next
-            </button>
-          </div>
+          <JobsBoard
+            jobs={data?.results ?? []}
+            loading={searchQuery.isLoading}
+            selectedKey={selectedKey}
+            onSelect={selectJob}
+            onClear={clearSelection}
+            mode={mode}
+            emptyMessage="Try broader keywords or a different location. Default market is GB."
+          />
 
-          {data!.attribution ? (
-            <p className="border-t border-guava-green/10 pt-6 text-center text-xs text-muted-foreground">
-              {data!.attribution}
+          {data && data.results.length > 0 ? (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <button
+                type="button"
+                disabled={submitted.page <= 1 || searchQuery.isFetching}
+                onClick={() => {
+                  const page = Math.max(1, submitted.page - 1);
+                  setSubmitted((s) => ({ ...s, page }));
+                  syncUrl({ page, job: null });
+                }}
+                className="rounded-lg border border-guava-green/20 bg-white/80 px-3 py-1.5 text-sm font-medium disabled:opacity-40"
+              >
+                Previous
+              </button>
+              <span className="font-mono text-xs text-muted-foreground">
+                {submitted.page} / {totalPages}
+              </span>
+              <button
+                type="button"
+                disabled={
+                  submitted.page >= totalPages || searchQuery.isFetching
+                }
+                onClick={() => {
+                  const page = submitted.page + 1;
+                  setSubmitted((s) => ({ ...s, page }));
+                  syncUrl({ page, job: null });
+                }}
+                className="rounded-lg border border-guava-green/20 bg-white/80 px-3 py-1.5 text-sm font-medium disabled:opacity-40"
+              >
+                Next
+              </button>
+            </div>
+          ) : null}
+
+          {data?.attribution ? (
+            <p className="text-center text-xs text-muted-foreground">
+              {data.attribution}
             </p>
           ) : null}
         </>
