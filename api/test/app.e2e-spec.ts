@@ -31,9 +31,20 @@ describe('GuavaJobs API (e2e)', () => {
       expect(res.body.status).toMatch(/^(ok|degraded)$/);
       expect(res.body.database).toBe('connected');
       expect(res.body.redis).toBe('connected');
+      expect(typeof res.body.workersEnabled).toBe('boolean');
       expect(res.body.queues).toMatchObject({
-        cvParse: expect.objectContaining({ waiting: expect.any(Number) }),
-        aiGeneration: expect.objectContaining({ active: expect.any(Number) }),
+        cvParse: expect.objectContaining({
+          waiting: expect.any(Number),
+          active: expect.any(Number),
+          delayed: expect.any(Number),
+          failed: expect.any(Number),
+        }),
+        aiGeneration: expect.objectContaining({
+          waiting: expect.any(Number),
+          active: expect.any(Number),
+          delayed: expect.any(Number),
+          failed: expect.any(Number),
+        }),
       });
     });
   });
