@@ -5,24 +5,27 @@ on:
     branches: [main]
     paths:
       - 'api/**'
-      - 'web/**'
+      - 'src/**'
+      - 'public/**'
       - 'package.json'
-      - 'vercel.json'
+      - 'package-lock.json'
+      - 'next.config.ts'
+      - 'tsconfig.json'
       - '.github/workflows/ci.yml'
   pull_request:
     paths:
       - 'api/**'
-      - 'web/**'
+      - 'src/**'
+      - 'public/**'
       - 'package.json'
-      - 'vercel.json'
+      - 'package-lock.json'
+      - 'next.config.ts'
+      - 'tsconfig.json'
       - '.github/workflows/ci.yml'
 
 jobs:
   web:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: web
     steps:
       - uses: actions/checkout@v4
 
@@ -30,7 +33,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
         run: npm ci
