@@ -1,6 +1,7 @@
 import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable } from '@nestjs/common';
 import { Queue } from 'bullmq';
+import { shouldRunBullmqWorkers } from '../config/workers';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   AI_GENERATION_QUEUE,
@@ -8,7 +9,15 @@ import {
 } from '../queue/queue.constants';
 import { RedisService } from '../redis/redis.service';
 
-type QueueStats = { waiting: number; active: number };
+/** Waiting jobs with no active workers — onboarding/generate will stall. */
+const STUCK_BACKLOG_THRESHOLD = 1;
+
+type QueueStats = {
+  waiting: number;
+  active: number;
+  delayed: number;
+  failed: number;
+};
 
 export type HealthCheckResult = {
   status: 'ok' | 'degraded' | 'error';
@@ -18,6 +27,8 @@ export type HealthCheckResult = {
   latencyMs: number;
   databaseLatencyMs?: number;
   redisLatencyMs?: number;
+  /** Whether this process registered BullMQ processors (see RUN_BULLMQ_WORKERS). */
+  workersEnabled: boolean;
   queues?: {
     cvParse: QueueStats;
     aiGeneration: QueueStats;
@@ -40,6 +51,7 @@ export class HealthService {
     let redis: HealthCheckResult['redis'] = 'disconnected';
     let databaseLatencyMs: number | undefined;
     let redisLatencyMs: number | undefined;
+    const workersEnabled = shouldRunBullmqWorkers();
 
     try {
       const dbStart = Date.now();
@@ -70,18 +82,57 @@ export class HealthService {
       redis = 'disconnected';
     }
 
-    const [cvWaiting, cvActive, aiWaiting, aiActive] = await Promise.all([
+    const [
+      cvWaiting,
+      cvActive,
+      cvDelayed,
+      cvFailed,
+      aiWaiting,
+      aiActive,
+      aiDelayed,
+      aiFailed,
+    ] = await Promise.all([
       this.cvParseQueue.getWaitingCount(),
       this.cvParseQueue.getActiveCount(),
+      this.cvParseQueue.getDelayedCount(),
+      this.cvParseQueue.getFailedCount(),
       this.aiQueue.getWaitingCount(),
       this.aiQueue.getActiveCount(),
+      this.aiQueue.getDelayedCount(),
+      this.aiQueue.getFailedCount(),
     ]);
+
+    const queues = {
+      cvParse: {
+        waiting: cvWaiting,
+        active: cvActive,
+        delayed: cvDelayed,
+        failed: cvFailed,
+      },
+      aiGeneration: {
+        waiting: aiWaiting,
+        active: aiActive,
+        delayed: aiDelayed,
+        failed: aiFailed,
+      },
+    };
+
+    const waitingTotal = cvWaiting + aiWaiting;
+    const activeTotal = cvActive + aiActive;
+    const queueBacklogStuck =
+      waitingTotal >= STUCK_BACKLOG_THRESHOLD && activeTotal === 0;
 
     const latencyMs = Date.now() - started;
     let status: HealthCheckResult['status'] = 'ok';
     if (database === 'disconnected' || schema === 'missing') {
       status = 'error';
     } else if (redis === 'disconnected') {
+      status = 'degraded';
+    } else if (!workersEnabled && waitingTotal > 0) {
+      // Jobs enqueued but this deployment is not running processors.
+      status = 'degraded';
+    } else if (workersEnabled && queueBacklogStuck) {
+      // Processors should be running but nothing is active — likely stalled.
       status = 'degraded';
     }
 
@@ -93,10 +144,8 @@ export class HealthService {
       latencyMs,
       databaseLatencyMs,
       redisLatencyMs,
-      queues: {
-        cvParse: { waiting: cvWaiting, active: cvActive },
-        aiGeneration: { waiting: aiWaiting, active: aiActive },
-      },
+      workersEnabled,
+      queues,
     };
 
     const httpStatus =

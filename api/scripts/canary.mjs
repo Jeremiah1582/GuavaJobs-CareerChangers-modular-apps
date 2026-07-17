@@ -75,6 +75,22 @@ try {
         `database schema not ready (${String(body.schema)}) — run prisma migrate deploy`,
       );
     }
+    // Money-path stalls when CV parse / AI generation never leave "waiting".
+    const q = body.queues || {};
+    const waiting =
+      (q.cvParse?.waiting || 0) + (q.aiGeneration?.waiting || 0);
+    const active =
+      (q.cvParse?.active || 0) + (q.aiGeneration?.active || 0);
+    if (body.workersEnabled === false && waiting > 0) {
+      throw new Error(
+        `BullMQ workers disabled (RUN_BULLMQ_WORKERS) with ${waiting} waiting job(s) — CV parse / AI generate will stall`,
+      );
+    }
+    if (waiting > 0 && active === 0) {
+      throw new Error(
+        `queue backlog stuck (waiting=${waiting}, active=0, workersEnabled=${String(body.workersEnabled)}) — restart API workers on Coolify / ensure RUN_BULLMQ_WORKERS is not false`,
+      );
+    }
   });
 } catch {
   failed = true;
