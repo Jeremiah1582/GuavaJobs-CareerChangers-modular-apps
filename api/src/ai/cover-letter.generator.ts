@@ -9,7 +9,7 @@ export const coverLetterLlmOutputSchema = z.object({
 export type CoverLetterLlmOutput = z.infer<typeof coverLetterLlmOutputSchema>;
 
 const SYSTEM_PROMPT = `You write honest, tailored cover letters for job applications.
-Use ONLY facts from the candidate profile and CV text provided.
+Use ONLY facts from the candidate profile, job description, and CV text provided.
 Never invent employers, dates, degrees, or skills.
 Career-change framing is allowed when supported by the CV.
 Return JSON: { "coverLetter": "plain text letter" }`;
@@ -24,7 +24,7 @@ export class CoverLetterGenerator {
     jobDescription: string;
     profileSummary: Record<string, unknown>;
     cvText: string;
-  }): Promise<CoverLetterLlmOutput> {
+  }): Promise<CoverLetterLlmOutput>{
     const userPrompt = JSON.stringify(
       {
         jobTitle: params.jobTitle,
