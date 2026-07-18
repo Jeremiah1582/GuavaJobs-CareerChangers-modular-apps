@@ -11,7 +11,11 @@ import { AppError } from '../shared/schemas/error.schema';
 
 type ChatCompletionResponse = {
   choices?: Array<{
-    message?: { content?: string | null };
+    message?: {
+      content?: string | null;
+      reasoning?: string | null;
+      reasoning_content?: string | null;
+    };
   }>;
   usage?: {
     prompt_tokens?: number;
@@ -19,6 +23,9 @@ type ChatCompletionResponse = {
     total_tokens?: number;
   };
 };
+
+/** Keep under typical reverse-proxy idle limits so clients don't see Internal Server Error. */
+const LLM_TIMEOUT_MS = 45_000;
 
 @Injectable()
 export class LlmClient {
@@ -51,6 +58,12 @@ export class LlmClient {
     const model = getLlmModel(env as EnvConfig);
     const started = Date.now();
 
+    if (/r1|reason/i.test(model)) {
+      this.logger.warn(
+        `Model "${model}" looks like a reasoning model — JSON ATS/cover-letter calls often hang. Prefer deepseek/deepseek-chat or gpt-4o-mini.`,
+      );
+    }
+
     const headers: Record<string, string> = {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
@@ -64,19 +77,42 @@ export class LlmClient {
       headers['X-Title'] = 'GuavaJobs API';
     }
 
-    const res = await fetch(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        model,
-        temperature: 0.2,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-      }),
-    });
+    let res: Response;
+    try {
+      res = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers,
+        signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
+        body: JSON.stringify({
+          model,
+          temperature: 0.2,
+          response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+        }),
+      });
+    } catch (error) {
+      const timedOut =
+        error instanceof Error &&
+        (error.name === 'TimeoutError' ||
+          error.name === 'AbortError' ||
+          /aborted|timeout/i.test(error.message));
+      if (timedOut) {
+        throw new AppError(
+          'AI_TIMEOUT',
+          `LLM timed out after ${LLM_TIMEOUT_MS / 1000}s (model=${model}). Use a fast chat model such as deepseek/deepseek-chat — not reasoning/r1.`,
+          504,
+          { model, purpose, ms: Date.now() - started },
+        );
+      }
+      throw new AppError(
+        'AI_REQUEST_FAILED',
+        `LLM request failed: ${error instanceof Error ? error.message : String(error)}`,
+        502,
+      );
+    }
 
     if (!res.ok) {
       const text = await res.text();
@@ -88,12 +124,17 @@ export class LlmClient {
     }
 
     const data = (await res.json()) as ChatCompletionResponse;
-    const content = data.choices?.[0]?.message?.content?.trim();
+    const message = data.choices?.[0]?.message;
+    const content = extractJsonContent(message);
     if (!content) {
-      throw new AppError('AI_EMPTY_RESPONSE', 'LLM returned empty content', 502);
+      throw new AppError(
+        'AI_EMPTY_RESPONSE',
+        `LLM returned empty content (model=${model}). Reasoning models often omit message.content — switch to deepseek/deepseek-chat or gpt-4o-mini.`,
+        502,
+        { model, purpose },
+      );
     }
 
-    // BUSINESS_PLAN R9 — token-usage line per LLM call
     this.logger.log(
       JSON.stringify({
         model,
@@ -106,4 +147,30 @@ export class LlmClient {
 
     return content;
   }
+}
+
+function extractJsonContent(
+  message:
+    | {
+        content?: string | null;
+        reasoning?: string | null;
+        reasoning_content?: string | null;
+      }
+    | undefined,
+): string | null {
+  if (!message) return null;
+  const direct = message.content?.trim();
+  if (direct) return direct;
+
+  // Some reasoning providers put the final answer in reasoning fields.
+  for (const raw of [message.reasoning, message.reasoning_content]) {
+    const text = raw?.trim();
+    if (!text) continue;
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      return text.slice(start, end + 1);
+    }
+  }
+  return null;
 }

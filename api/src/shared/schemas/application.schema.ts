@@ -131,6 +131,20 @@ export const createManualApplicationSchema = z
 export const generateApplicationSchema = z.object({
   profileId: z.string().min(1),
   canonicalJobKey: z.string().min(1),
+  /** Client-supplied job facts — used when Redis job cache has expired. */
+  job: z
+    .object({
+      title: z.string().min(1).max(300),
+      company: z.string().min(1).max(300),
+      description: z.string().max(100_000).optional(),
+      applyUrl: z.string().max(2000).optional(),
+      location: z.string().max(300).nullable().optional(),
+      snippet: z.string().max(2000).optional(),
+      atsType: z
+        .enum(['greenhouse', 'lever', 'ashby', 'adzuna', 'unknown'])
+        .optional(),
+    })
+    .optional(),
 });
 
 export const patchApplicationSchema = z

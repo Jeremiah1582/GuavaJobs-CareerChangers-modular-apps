@@ -146,6 +146,88 @@ export class JobsService {
     return job;
   }
 
+  /**
+   * Resolve a job for AI generate. Prefers Redis cache; seeds from client
+   * snapshot when Adzuna listings have expired (common after ~30m).
+   */
+  async resolveForGenerate(
+    rawKey: string,
+    clientJob?: {
+      title: string;
+      company: string;
+      description?: string;
+      applyUrl?: string;
+      location?: string | null;
+      snippet?: string;
+      atsType?: UnifiedJob['atsType'];
+    },
+  ): Promise<UnifiedJob> {
+    const canonicalKey = decodeURIComponent(rawKey).trim().toLowerCase();
+    try {
+      try {
+        return await this.getByCanonicalKey(canonicalKey, { expandAts: true });
+      } catch (expandError) {
+        // expandAts can fail on redirect/network — fall back to cached listing.
+        if (
+          expandError instanceof AppError &&
+          expandError.code === 'JOB_NOT_FOUND'
+        ) {
+          throw expandError;
+        }
+        this.logger.warn(
+          `ATS expand failed for ${canonicalKey}; using cached job if present`,
+        );
+        return await this.getByCanonicalKey(canonicalKey);
+      }
+    } catch (error) {
+      if (!(error instanceof AppError) || error.code !== 'JOB_NOT_FOUND') {
+        throw error;
+      }
+      if (!clientJob?.title || !clientJob.company) {
+        throw error;
+      }
+
+      const description =
+        clientJob.description?.trim() ||
+        clientJob.snippet?.trim() ||
+        `${clientJob.title} at ${clientJob.company}`;
+      const applyUrl =
+        clientJob.applyUrl?.trim() || 'https://www.adzuna.com';
+      const parsed = parseCanonicalKey(canonicalKey);
+      const atsFromKey = parsed?.atsType;
+      const atsType: UnifiedJob['atsType'] =
+        clientJob.atsType ??
+        (atsFromKey === 'greenhouse' ||
+        atsFromKey === 'lever' ||
+        atsFromKey === 'ashby' ||
+        atsFromKey === 'adzuna' ||
+        atsFromKey === 'unknown'
+          ? atsFromKey
+          : 'adzuna');
+      const seeded: UnifiedJob = {
+        canonicalKey,
+        title: clientJob.title,
+        company: clientJob.company,
+        location: clientJob.location ?? null,
+        snippet: description.slice(0, 280),
+        description,
+        applyUrl,
+        atsType,
+        hasFullDescription: description.length > 200,
+        applyType: applyUrl.startsWith('http') ? 'url' : 'unknown',
+        source: 'adzuna',
+        fetchedAt: new Date().toISOString(),
+        adzunaId: parsed?.jobId,
+        adzunaCountry: parsed?.board,
+      };
+      await this.cache.setJob(seeded);
+      this.logger.warn(
+        `Seeded job cache from client snapshot for ${canonicalKey}`,
+      );
+      return seeded;
+    }
+  }
+
   /** Resolve Adzuna listing → employer ATS and fetch full job description when possible. */
   private async tryExpandWithAts(cached: UnifiedJob): Promise<UnifiedJob | null> {
     const resolved =

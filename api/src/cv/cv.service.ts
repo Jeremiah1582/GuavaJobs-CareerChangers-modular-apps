@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { CvParseStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
+import { ProfileAtsService } from '../assessments/profile-ats.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppError } from '../shared/schemas/error.schema';
 import {
@@ -27,6 +28,7 @@ export class CvService {
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
     private readonly cvParse: CvParseService,
+    private readonly profileAts: ProfileAtsService,
   ) {}
 
   async uploadCv(
@@ -74,6 +76,9 @@ export class CvService {
         data: { currentCvId: created.id },
       });
 
+      // Stale industry ATS must not linger against a replaced CV.
+      await tx.profileAtsAssessment.deleteMany({ where: { profileId } });
+
       return created;
     });
 
@@ -84,6 +89,10 @@ export class CvService {
       file.mimetype,
       file.originalname,
     );
+
+    if (resolved.parseStatus === CvParseStatus.READY) {
+      this.profileAts.scheduleAutoAssessment(userId, profileId, resolved.id);
+    }
 
     return {
       profileId,
@@ -108,6 +117,12 @@ export class CvService {
 
     const cv = profile.currentCv;
     if (cv.parseStatus === CvParseStatus.READY && cv.parsedText) {
+      const existing = await this.profileAts.getForProfile(profileId);
+      const matchesCv =
+        existing?.cvDocumentId == null || existing.cvDocumentId === cv.id;
+      if (!existing || !matchesCv) {
+        this.profileAts.scheduleAutoAssessment(userId, profileId, cv.id);
+      }
       return this.toCvMeta(cv);
     }
 
@@ -118,6 +133,12 @@ export class CvService {
       cv.mimeType,
       cv.fileName,
     );
+
+    if (resolved.parseStatus === CvParseStatus.READY) {
+      await this.profileAts.clearForProfile(profileId);
+      this.profileAts.scheduleAutoAssessment(userId, profileId, resolved.id);
+    }
+
     return this.toCvMeta(resolved);
   }
 

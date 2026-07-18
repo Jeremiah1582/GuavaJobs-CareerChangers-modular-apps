@@ -87,14 +87,15 @@ export async function apiFetch<T>(
 
   if (!res.ok) {
     const payload = (await res.json().catch(() => null)) as ApiErrorBody | null;
-    throw new ApiError(
-      payload?.error?.message ?? res.statusText ?? "Request failed",
-      {
-        status: res.status,
-        code: payload?.error?.code,
-        details: payload?.error?.details,
-      },
-    );
+    const fallback =
+      res.status === 500 || res.status === 502 || res.status === 504
+        ? "API timed out or crashed (often a slow/reasoning LLM model). Use OPENAI_MODEL=deepseek/deepseek-chat, not r1."
+        : res.statusText || "Request failed";
+    throw new ApiError(payload?.error?.message ?? fallback, {
+      status: res.status,
+      code: payload?.error?.code,
+      details: payload?.error?.details,
+    });
   }
 
   if (res.status === 204) {

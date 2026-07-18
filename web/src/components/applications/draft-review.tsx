@@ -382,8 +382,8 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
                   <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                     {app.generationError ||
                       "Something went wrong building this package."}{" "}
-                    Retry uses one AI credit and rebuilds the letter and fit
-                    report.
+                    Retry re-queues the same application without using an extra
+                    credit when the prior attempt failed.
                   </p>
                   <button
                     type="button"

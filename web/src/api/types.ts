@@ -50,9 +50,23 @@ export type ProfileDetail = ProfileResponse & {
 export type ProfileAtsAssessment = {
   profileId: string;
   industry: ProfileIndustry;
+  cvDocumentId?: string | null;
   score: number;
+  summary?: string | null;
   missingKeywords: string[];
   suggestions: string[];
+  strengths?: string[];
+  priorityActions?: Array<{
+    title: string;
+    detail: string;
+    impact: "high" | "medium" | "low";
+  }>;
+  checklist?: Array<{
+    id: string;
+    label: string;
+    passed: boolean;
+    detail: string;
+  }>;
   breakdown: Record<string, number>;
   inputFingerprint?: string | null;
   assessedAt: string;

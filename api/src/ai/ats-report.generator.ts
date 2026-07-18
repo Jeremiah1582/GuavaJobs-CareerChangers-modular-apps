@@ -1,6 +1,11 @@
 import { z } from 'zod';
 import { Injectable } from '@nestjs/common';
 import { LlmClient } from './llm.client';
+import {
+  toIntScore,
+  toNumberRecord,
+  toStringArray,
+} from './score-normalize';
 
 export const applicationAtsLlmOutputSchema = z.object({
   score: z.coerce.number().int().min(0).max(100),
@@ -74,42 +79,6 @@ function normalizeAtsOutput(raw: Record<string, unknown>): Record<string, unknow
     icpMatch: toObject(raw.icpMatch),
     breakdown: toNumberRecord(raw.breakdown),
   };
-}
-
-function toIntScore(value: unknown): number {
-  let num = Number(value);
-  if (Number.isNaN(num)) {
-    return Number.NaN;
-  }
-  // Some models return 0–1 fractions instead of 0–100 integers.
-  if (num > 0 && num <= 1) {
-    num *= 100;
-  }
-  return Math.round(Math.min(100, Math.max(0, num)));
-}
-
-function toStringArray(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    return value.filter((v): v is string => typeof v === 'string');
-  }
-  if (typeof value === 'string' && value.trim()) {
-    return [value.trim()];
-  }
-  return [];
-}
-
-function toNumberRecord(value: unknown): Record<string, number> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return {};
-  }
-  const out: Record<string, number> = {};
-  for (const [key, val] of Object.entries(value)) {
-    const num = Number(val);
-    if (!Number.isNaN(num)) {
-      out[key] = num;
-    }
-  }
-  return out;
 }
 
 function toObject(value: unknown): Record<string, unknown> {

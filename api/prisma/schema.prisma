@@ -211,9 +211,15 @@ model CvDocument {
 model ProfileAtsAssessment {
   profileId        String          @id
   industry         ProfileIndustry // industry criteria used for this run
+  /// Active CV this report was computed for — guards against stale async overwrites.
+  cvDocumentId     String?
   score            Int
+  summary          String?         @db.Text
   missingKeywords  Json            @default("[]")
   suggestions      Json            @default("[]")
+  strengths        Json            @default("[]")
+  priorityActions  Json            @default("[]")
+  checklist        Json            @default("[]")
   breakdown        Json            @default("{}")
   inputFingerprint String?
   assessedAt       DateTime
@@ -222,6 +228,7 @@ model ProfileAtsAssessment {
 
   profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
+  @@index([cvDocumentId])
   @@map("profile_ats_assessments")
 }
 

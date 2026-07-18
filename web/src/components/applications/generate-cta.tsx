@@ -14,8 +14,19 @@ import { getAccessToken } from "@/lib/session";
 
 export function GenerateCta({
   canonicalJobKey,
+  job,
 }: {
   canonicalJobKey: string;
+  /** Optional listing facts so generate still works if Redis job cache expired. */
+  job?: {
+    title: string;
+    company: string;
+    description?: string;
+    applyUrl?: string;
+    location?: string | null;
+    snippet?: string;
+    atsType?: string;
+  };
 }) {
   const router = useRouter();
   const idempotencyKey = useRef<string | null>(null);
@@ -48,12 +59,11 @@ export function GenerateCta({
         });
       }
       const token = await getAccessToken();
-      if (!idempotencyKey.current) {
-        idempotencyKey.current =
-          typeof crypto !== "undefined" && "randomUUID" in crypto
-            ? crypto.randomUUID()
-            : `web-gen-${Date.now()}`;
-      }
+      // Fresh key per click so a prior FAILED attempt can be retried.
+      idempotencyKey.current =
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `web-gen-${Date.now()}`;
       return apiFetch<ApplicationResponse>("/applications/generate", {
         method: "POST",
         token,
@@ -63,6 +73,19 @@ export function GenerateCta({
         body: JSON.stringify({
           profileId,
           canonicalJobKey,
+          ...(job
+            ? {
+                job: {
+                  title: job.title,
+                  company: job.company,
+                  description: job.description,
+                  applyUrl: job.applyUrl,
+                  location: job.location ?? null,
+                  snippet: job.snippet,
+                  atsType: job.atsType,
+                },
+              }
+            : {}),
         }),
       });
     },
@@ -100,6 +123,18 @@ export function GenerateCta({
       if (err instanceof ApiError && err.code === "PROFILE_REQUIRED") {
         setError(err.message);
         setNextAction("Finish onboarding or set a default profile.");
+        return;
+      }
+      if (err instanceof ApiError && err.code === "JOB_NOT_FOUND") {
+        setError(err.message);
+        setNextAction(
+          "Open the job from search again so we can refresh the listing, then retry Generate.",
+        );
+        return;
+      }
+      if (err instanceof ApiError && err.code === "QUEUE_UNAVAILABLE") {
+        setError(err.message);
+        setNextAction("The AI worker queue is temporarily down. Try again in a minute.");
         return;
       }
       setError(

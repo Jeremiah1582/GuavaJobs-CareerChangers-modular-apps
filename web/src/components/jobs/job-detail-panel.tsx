@@ -201,7 +201,18 @@ export function JobDetailPanel({
                 Generate in app
               </a>
             ) : (
-              <GenerateCta canonicalJobKey={summary.canonicalKey} />
+              <GenerateCta
+                canonicalJobKey={summary.canonicalKey}
+                job={{
+                  title: (job ?? summary).title,
+                  company: (job ?? summary).company,
+                  description: job?.description || summary.snippet,
+                  applyUrl: applyUrl,
+                  location: (job ?? summary).location,
+                  snippet: summary.snippet,
+                  atsType: (job ?? summary).atsType,
+                }}
+              />
             )}
             <a
               href={applyUrl}

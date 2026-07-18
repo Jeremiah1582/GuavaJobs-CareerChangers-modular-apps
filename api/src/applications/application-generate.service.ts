@@ -4,6 +4,7 @@ import {
   ApplicationGenerationMode,
   ApplicationGenerationStatus,
   ApplicationStatus,
+  Prisma,
 } from '@prisma/client';
 import { Queue } from 'bullmq';
 import { JobsService } from '../jobs/jobs.service';
@@ -11,6 +12,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AI_GENERATION_QUEUE, AiGenerationJobData } from '../queue/queue.constants';
 import { AppError } from '../shared/schemas/error.schema';
 import { GenerateApplicationInput } from '../shared/schemas/application.schema';
+import { UnifiedJob } from '../shared/schemas/job.schema';
 import { UsageService } from '../users/usage.service';
 import { toApplicationResponse } from './application.mapper';
 import { IdempotencyService } from './idempotency.service';
@@ -38,8 +40,11 @@ export class ApplicationGenerateService {
       );
       if (existingId) {
         const existing = await this.getOwnedApplication(userId, existingId);
-        if (this.isStuckGeneration(existing)) {
-          await this.requeueStuck(userId, existing.id, 'generate');
+        if (
+          this.isStuckGeneration(existing) ||
+          existing.generationStatus === ApplicationGenerationStatus.FAILED
+        ) {
+          await this.requeueGeneration(userId, existing.id, 'generate');
           const refreshed = await this.getOwnedApplication(userId, existing.id);
           return {
             statusCode: 202 as const,
@@ -64,7 +69,8 @@ export class ApplicationGenerateService {
     }
 
     const canonicalJobKey = input.canonicalJobKey.toLowerCase();
-    await this.jobs.getByCanonicalKey(canonicalJobKey);
+    const job = await this.jobs.resolveForGenerate(canonicalJobKey, input.job);
+    const earlyJobSnapshot = this.toJobSnapshot(job);
 
     const duplicate = await this.prisma.application.findFirst({
       where: { userId, canonicalJobKey },
@@ -73,13 +79,45 @@ export class ApplicationGenerateService {
     if (duplicate) {
       // Stuck PENDING/PROCESSING (worker down / Redis / LLM) — re-enqueue without a new row.
       if (this.isStuckGeneration(duplicate)) {
-        await this.requeueStuck(userId, duplicate.id, 'generate');
+        await this.requeueGeneration(userId, duplicate.id, 'generate', earlyJobSnapshot);
         const refreshed = await this.getOwnedApplication(userId, duplicate.id);
         return {
           statusCode: 202 as const,
           body: toApplicationResponse(refreshed),
         };
       }
+
+      // Previous AI attempt failed — retry in place (quota already asserted above).
+      if (duplicate.generationStatus === ApplicationGenerationStatus.FAILED) {
+        await this.prisma.application.update({
+          where: { id: duplicate.id },
+          data: {
+            profileId: input.profileId,
+            generationMode: ApplicationGenerationMode.AI,
+            generationStatus: ApplicationGenerationStatus.PENDING,
+            generationError: null,
+            jobSnapshot: earlyJobSnapshot as Prisma.InputJsonValue,
+            companyName: job.company,
+            jobRoleTitle: job.title,
+            jobLocation: job.location,
+            applyUrl: job.applyUrl,
+          },
+        });
+        if (idempotencyKey) {
+          await this.idempotency.bind(userId, idempotencyKey, duplicate.id);
+        }
+        await this.enqueue({
+          type: 'generate',
+          applicationId: duplicate.id,
+          userId,
+        });
+        const refreshed = await this.getOwnedApplication(userId, duplicate.id);
+        return {
+          statusCode: 202 as const,
+          body: toApplicationResponse(refreshed),
+        };
+      }
+
       // Tracker row saved from a public listing (MANUAL, no AI yet) — upgrade in place.
       if (
         duplicate.generationMode === ApplicationGenerationMode.MANUAL &&
@@ -92,6 +130,11 @@ export class ApplicationGenerateService {
             generationMode: ApplicationGenerationMode.AI,
             generationStatus: ApplicationGenerationStatus.PENDING,
             generationError: null,
+            jobSnapshot: earlyJobSnapshot as Prisma.InputJsonValue,
+            companyName: job.company,
+            jobRoleTitle: job.title,
+            jobLocation: job.location,
+            applyUrl: job.applyUrl,
           },
           include: { atsReport: true },
         });
@@ -119,6 +162,11 @@ export class ApplicationGenerateService {
         generationMode: ApplicationGenerationMode.AI,
         canonicalJobKey,
         generationStatus: ApplicationGenerationStatus.PENDING,
+        jobSnapshot: earlyJobSnapshot as Prisma.InputJsonValue,
+        companyName: job.company,
+        jobRoleTitle: job.title,
+        jobLocation: job.location,
+        applyUrl: job.applyUrl,
       },
       include: { atsReport: true },
     });
@@ -149,9 +197,12 @@ export class ApplicationGenerateService {
     const stuck =
       app.generationStatus === ApplicationGenerationStatus.PENDING ||
       app.generationStatus === ApplicationGenerationStatus.PROCESSING;
+    const failed =
+      app.generationStatus === ApplicationGenerationStatus.FAILED;
 
-    // Re-queue of a stuck job must not consume another quota credit.
-    if (!stuck) {
+    // Re-queue of a stuck/failed job must not consume another quota credit
+    // if the prior attempt never completed successfully.
+    if (!stuck && !failed) {
       await this.usage.assertCanGenerateAi(userId);
     }
 
@@ -164,7 +215,7 @@ export class ApplicationGenerateService {
     });
 
     await this.enqueue({
-      type: stuck ? 'generate' : 'regenerate',
+      type: stuck || failed ? 'generate' : 'regenerate',
       applicationId,
       userId,
     });
@@ -190,29 +241,66 @@ export class ApplicationGenerateService {
 
   private static readonly STUCK_MS = 30_000;
 
-  private async requeueStuck(
+  private async requeueGeneration(
     userId: string,
     applicationId: string,
     type: AiGenerationJobData['type'],
+    jobSnapshot?: Record<string, unknown>,
   ): Promise<void> {
     await this.prisma.application.update({
       where: { id: applicationId },
       data: {
         generationStatus: ApplicationGenerationStatus.PENDING,
         generationError: null,
+        ...(jobSnapshot
+          ? { jobSnapshot: jobSnapshot as Prisma.InputJsonValue }
+          : {}),
       },
     });
     await this.enqueue({ type, applicationId, userId });
   }
 
+  private toJobSnapshot(job: UnifiedJob): Record<string, unknown> {
+    return {
+      canonicalKey: job.canonicalKey,
+      title: job.title,
+      company: job.company,
+      location: job.location,
+      seniority: null,
+      description: job.description,
+      applyUrl: job.applyUrl,
+      atsType: job.atsType,
+      source: job.source,
+      fetchedAt: job.fetchedAt,
+    };
+  }
+
   private async enqueue(data: AiGenerationJobData): Promise<void> {
-    await this.aiQueue.add(data.type, data, {
-      jobId: `${data.type}-${data.applicationId}-${Date.now()}`,
-      removeOnComplete: 100,
-      removeOnFail: 50,
-      attempts: 2,
-      backoff: { type: 'exponential', delay: 3000 },
-    });
+    try {
+      await this.aiQueue.add(data.type, data, {
+        jobId: `${data.type}-${data.applicationId}-${Date.now()}`,
+        removeOnComplete: 100,
+        removeOnFail: 50,
+        attempts: 2,
+        backoff: { type: 'exponential', delay: 3000 },
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to enqueue AI job';
+      await this.prisma.application.update({
+        where: { id: data.applicationId },
+        data: {
+          generationStatus: ApplicationGenerationStatus.FAILED,
+          generationError: `Queue unavailable: ${message}`,
+        },
+      });
+      throw new AppError(
+        'QUEUE_UNAVAILABLE',
+        'Could not start generation — queue is unavailable. Try again shortly.',
+        503,
+        { message },
+      );
+    }
   }
 
   private async getOwnedApplication(userId: string, applicationId: string) {

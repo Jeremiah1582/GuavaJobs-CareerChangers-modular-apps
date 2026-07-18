@@ -469,10 +469,25 @@ export function OnboardingWizard() {
                   existingCv={profile.currentCv}
                   parseStatus={parseStatus}
                   onUpload={uploadCv}
-                  onContinueWhenReady={() => {
+                  onContinueWhenReady={async () => {
                     track(AnalyticsEvents.onboarding_step_completed, {
                       step: "cv_ready",
                     });
+                    // Prefer the auto-assessment kicked off at upload.
+                    if (profile?.id) {
+                      try {
+                        const token = await getAccessToken();
+                        const detail = await apiFetch<ProfileDetail>(
+                          `/profiles/${profile.id}`,
+                          { token },
+                        );
+                        if (detail.generalAtsAssessment) {
+                          setAssessment(detail.generalAtsAssessment);
+                        }
+                      } catch {
+                        // StepAts will POST if still missing.
+                      }
+                    }
                     setStep("ats");
                   }}
                   onSkipForNow={finish}

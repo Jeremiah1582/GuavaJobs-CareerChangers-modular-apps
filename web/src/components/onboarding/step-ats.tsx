@@ -1,7 +1,13 @@
 "use client";
 
-import { ArrowRight, CircleNotch } from "@phosphor-icons/react";
+import {
+  ArrowRight,
+  CheckCircle,
+  CircleNotch,
+  XCircle,
+} from "@phosphor-icons/react";
 import { motion } from "framer-motion";
+import { useEffect, useRef } from "react";
 import type { ProfileAtsAssessment } from "@/api/types";
 import { INDUSTRY_LABELS } from "@/lib/onboarding";
 
@@ -20,6 +26,18 @@ export function StepAts({
   onFinish: () => void;
   onSkip: () => void;
 }) {
+  const autoRan = useRef(false);
+
+  useEffect(() => {
+    if (assessment || loading || error || autoRan.current) return;
+    autoRan.current = true;
+    void onRun();
+  }, [assessment, loading, error, onRun]);
+
+  const checklist = assessment?.checklist ?? [];
+  const priorityActions = assessment?.priorityActions ?? [];
+  const strengths = assessment?.strengths ?? [];
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -27,12 +45,13 @@ export function StepAts({
           CV health check
         </h2>
         <p className="mt-2 max-w-[65ch] text-base leading-relaxed text-muted-foreground">
-          Free industry-specific ATS feedback on your current CV. Does not use
-          generation quota. You can skip and run this later from Profile.
+          Free industry-specific ATS feedback on your current CV. Runs
+          automatically — does not use generation quota. You can skip and revisit
+          from Profile.
         </p>
       </div>
 
-      {!assessment && !loading ? (
+      {!assessment && !loading && !error ? (
         <div className="flex flex-wrap gap-3">
           <button
             type="button"
@@ -111,13 +130,99 @@ export function StepAts({
               {assessment.score}
               <span className="text-lg text-muted-foreground">/100</span>
             </p>
+            {assessment.summary ? (
+              <p className="mt-3 max-w-[65ch] text-sm leading-relaxed text-foreground">
+                {assessment.summary}
+              </p>
+            ) : null}
           </div>
+
+          {priorityActions.length > 0 ? (
+            <div>
+              <h3 className="text-sm font-medium text-foreground">
+                What to improve first
+              </h3>
+              <ol className="mt-2 list-decimal space-y-2 pl-5 text-sm leading-relaxed text-muted-foreground">
+                {priorityActions.slice(0, 4).map((a) => (
+                  <li key={a.title}>
+                    <span className="font-medium text-foreground">
+                      {a.title}
+                    </span>
+                    {" — "}
+                    {a.detail}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          ) : assessment.suggestions.length > 0 ? (
+            <div>
+              <h3 className="text-sm font-medium text-foreground">
+                Suggestions
+              </h3>
+              <ul className="mt-2 list-inside list-disc space-y-1.5 text-sm leading-relaxed text-muted-foreground">
+                {assessment.suggestions.slice(0, 6).map((s) => (
+                  <li key={s}>{s}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {strengths.length > 0 ? (
+            <div>
+              <h3 className="text-sm font-medium text-foreground">
+                What already works
+              </h3>
+              <ul className="mt-2 list-inside list-disc space-y-1.5 text-sm leading-relaxed text-muted-foreground">
+                {strengths.slice(0, 4).map((s) => (
+                  <li key={s}>{s}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {checklist.length > 0 ? (
+            <div>
+              <h3 className="text-sm font-medium text-foreground">
+                ATS checklist
+              </h3>
+              <ul className="mt-2 space-y-1.5">
+                {checklist.slice(0, 6).map((item) => (
+                  <li
+                    key={item.id}
+                    className="flex items-start gap-2 text-sm text-muted-foreground"
+                  >
+                    {item.passed ? (
+                      <CheckCircle
+                        className="mt-0.5 size-4 shrink-0 text-guava-green"
+                        weight="regular"
+                      />
+                    ) : (
+                      <XCircle
+                        className="mt-0.5 size-4 shrink-0 text-guava-pink"
+                        weight="regular"
+                      />
+                    )}
+                    <span>
+                      <span className="font-medium text-foreground">
+                        {item.label}
+                      </span>
+                      {" — "}
+                      {item.detail}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
 
           {assessment.missingKeywords.length > 0 ? (
             <div>
               <h3 className="text-sm font-medium text-foreground">
                 Keywords to consider
               </h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Only add terms you can honestly defend.
+              </p>
               <ul className="mt-2 flex flex-wrap gap-2">
                 {assessment.missingKeywords.slice(0, 12).map((kw) => (
                   <li
@@ -126,19 +231,6 @@ export function StepAts({
                   >
                     {kw}
                   </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-
-          {assessment.suggestions.length > 0 ? (
-            <div>
-              <h3 className="text-sm font-medium text-foreground">
-                Suggestions
-              </h3>
-              <ul className="mt-2 list-inside list-disc space-y-1.5 text-sm leading-relaxed text-muted-foreground">
-                {assessment.suggestions.slice(0, 6).map((s) => (
-                  <li key={s}>{s}</li>
                 ))}
               </ul>
             </div>

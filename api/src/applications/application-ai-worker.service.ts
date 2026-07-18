@@ -72,7 +72,10 @@ export class ApplicationAiWorkerService {
       throw new Error('Missing canonicalJobKey');
     }
 
-    const jobData = await this.jobs.getByCanonicalKey(app.canonicalJobKey);
+    const jobData = await this.resolveJobForWorker(
+      app.canonicalJobKey,
+      app.jobSnapshot,
+    );
     const bundle = await this.snapshots.buildForGenerate(
       job.userId,
       app.profileId,
@@ -152,6 +155,71 @@ export class ApplicationAiWorkerService {
     });
 
     await this.usage.incrementAiUsage(job.userId);
+  }
+
+  private async resolveJobForWorker(
+    canonicalJobKey: string,
+    storedSnapshot: unknown,
+  ): Promise<import('../shared/schemas/job.schema').UnifiedJob> {
+    try {
+      return await this.jobs.getByCanonicalKey(canonicalJobKey, {
+        expandAts: true,
+      });
+    } catch (error) {
+      const fromStore = this.jobFromSnapshot(canonicalJobKey, storedSnapshot);
+      if (fromStore) {
+        this.logger.warn(
+          `Worker using stored jobSnapshot for ${canonicalJobKey} (cache miss)`,
+        );
+        return fromStore;
+      }
+      throw error;
+    }
+  }
+
+  private jobFromSnapshot(
+    canonicalJobKey: string,
+    snapshot: unknown,
+  ): import('../shared/schemas/job.schema').UnifiedJob | null {
+    if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
+      return null;
+    }
+    const row = snapshot as Record<string, unknown>;
+    const title = typeof row.title === 'string' ? row.title : null;
+    const company = typeof row.company === 'string' ? row.company : null;
+    const description =
+      typeof row.description === 'string' ? row.description : null;
+    if (!title || !company || !description) {
+      return null;
+    }
+    const applyUrl =
+      typeof row.applyUrl === 'string' && row.applyUrl
+        ? row.applyUrl
+        : 'https://www.adzuna.com';
+    return {
+      canonicalKey: canonicalJobKey,
+      title,
+      company,
+      location: typeof row.location === 'string' ? row.location : null,
+      snippet: description.slice(0, 280),
+      description,
+      applyUrl,
+      atsType:
+        row.atsType === 'greenhouse' ||
+        row.atsType === 'lever' ||
+        row.atsType === 'ashby' ||
+        row.atsType === 'adzuna' ||
+        row.atsType === 'unknown'
+          ? row.atsType
+          : 'adzuna',
+      hasFullDescription: description.length > 200,
+      applyType: applyUrl.startsWith('http') ? 'url' : 'unknown',
+      source: 'adzuna',
+      fetchedAt:
+        typeof row.fetchedAt === 'string'
+          ? row.fetchedAt
+          : new Date().toISOString(),
+    };
   }
 
   private async runRegenerate(job: AiGenerationJobData): Promise<void> {

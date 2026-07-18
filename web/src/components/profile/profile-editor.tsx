@@ -293,6 +293,8 @@ export function ProfileEditor() {
               ...prev,
               currentCvId: res.currentCvId,
               currentCv: res.cv,
+              // Cleared server-side; keep UI in sync while auto-ATS runs.
+              generalAtsAssessment: null,
             }
           : prev,
       );
@@ -684,6 +686,7 @@ export function ProfileEditor() {
           assessment={profile.generalAtsAssessment}
           industry={industry}
           cvParseStatus={parseStatus ?? profile.currentCv?.parseStatus ?? null}
+          cvDocumentId={profile.currentCv?.id ?? null}
           cvUploadedAt={profile.currentCv?.uploadedAt ?? null}
           hasCv={Boolean(profile.currentCv)}
           getToken={getToken}
