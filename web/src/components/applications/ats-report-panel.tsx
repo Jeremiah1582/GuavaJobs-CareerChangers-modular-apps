@@ -1,7 +1,13 @@
 "use client";
 
-import type { ApplicationAtsReport } from "@/api/types";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { CircleNotch, WarningCircle } from "@phosphor-icons/react";
+import { useEffect, useState } from "react";
+import { apiFetch, ApiError } from "@/api/client";
+import type { ApplicationAtsReport, ApplicationResponse } from "@/api/types";
 import { PaperPanel } from "@/components/ui/paper-panel";
+import { AnalyticsEvents, track } from "@/lib/analytics";
+import { getAccessToken } from "@/lib/session";
 
 function ScoreRing({ score, label }: { score: number; label: string }) {
   const tone =
@@ -46,10 +52,100 @@ function BulletList({
   );
 }
 
-export function AtsReportPanel({ report }: { report: ApplicationAtsReport }) {
+export function AtsReportPanel({
+  applicationId,
+  report,
+}: {
+  applicationId: string;
+  report: ApplicationAtsReport;
+}) {
+  const queryClient = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+  const [awaitingRefresh, setAwaitingRefresh] = useState(false);
+  const [assessedAtBaseline, setAssessedAtBaseline] = useState<string | null>(
+    null,
+  );
+
+  const refreshMutation = useMutation({
+    mutationFn: async () => {
+      const token = await getAccessToken();
+      return apiFetch<ApplicationResponse>(
+        `/applications/${applicationId}/generate-ats-report`,
+        { method: "POST", token },
+      );
+    },
+    onSuccess: (data) => {
+      setError(null);
+      setAssessedAtBaseline(report.assessedAt);
+      setAwaitingRefresh(true);
+      queryClient.setQueryData(["application", applicationId], data);
+      track(AnalyticsEvents.generate_started, {
+        applicationId,
+        mode: "ats_refresh",
+      });
+      void queryClient.invalidateQueries({ queryKey: ["me"] });
+    },
+    onError: (err) => {
+      setAwaitingRefresh(false);
+      setAssessedAtBaseline(null);
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Could not refresh the fit report.",
+      );
+    },
+  });
+
+  // Poll until the report fingerprint is fresh (assessedAt moves / stale clears).
+  useEffect(() => {
+    if (!awaitingRefresh) return;
+    const id = window.setInterval(() => {
+      void queryClient.invalidateQueries({
+        queryKey: ["application", applicationId],
+      });
+    }, 2500);
+    return () => window.clearInterval(id);
+  }, [awaitingRefresh, applicationId, queryClient]);
+
+  useEffect(() => {
+    if (!awaitingRefresh || !assessedAtBaseline) return;
+    if (report.assessedAt !== assessedAtBaseline && report.stale !== true) {
+      setAwaitingRefresh(false);
+      setAssessedAtBaseline(null);
+    }
+  }, [
+    awaitingRefresh,
+    assessedAtBaseline,
+    report.assessedAt,
+    report.stale,
+  ]);
+
+  const refreshing = refreshMutation.isPending || awaitingRefresh;
+  const showStale = report.stale === true || awaitingRefresh;
+
   return (
-    <PaperPanel className="border-guava-green/20 p-5 md:p-6">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
+    <PaperPanel className="relative border-guava-green/20 p-5 md:p-6">
+      {showStale ? (
+        <button
+          type="button"
+          disabled={refreshing}
+          onClick={() => refreshMutation.mutate()}
+          className="absolute right-3 top-3 z-10 inline-flex max-w-[min(100%-1.5rem,16rem)] items-center gap-1.5 rounded-lg border border-guava-pink/35 bg-guava-pink/10 px-2.5 py-1.5 text-left text-xs font-medium text-guava-pink shadow-sm transition-[opacity,transform] hover:bg-guava-pink/15 active:scale-[0.98] disabled:opacity-60"
+        >
+          {refreshing ? (
+            <CircleNotch className="size-3.5 shrink-0 animate-spin" weight="bold" />
+          ) : (
+            <WarningCircle className="size-3.5 shrink-0" weight="fill" />
+          )}
+          <span>
+            {refreshing
+              ? "Updating fit report…"
+              : "Update required — update now"}
+          </span>
+        </button>
+      ) : null}
+
+      <div className="flex flex-wrap items-baseline justify-between gap-2 pr-2">
         <h2 className="text-base font-semibold tracking-tight">
           Fit &amp; ATS report
         </h2>
@@ -57,6 +153,12 @@ export function AtsReportPanel({ report }: { report: ApplicationAtsReport }) {
           Based on your CV — we never invent employers or skills
         </p>
       </div>
+
+      {error ? (
+        <p className="mt-3 text-sm text-destructive" role="alert">
+          {error}
+        </p>
+      ) : null}
 
       <div className="mt-6 grid grid-cols-3 gap-4 border-b border-guava-green/10 pb-6">
         <ScoreRing score={report.score} label="Overall fit" />

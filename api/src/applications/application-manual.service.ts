@@ -152,24 +152,69 @@ export class ApplicationManualService {
 
   async generateAtsReport(userId: string, applicationId: string) {
     await this.usage.assertCanGenerateAi(userId);
-    await this.findManual(userId, applicationId);
-
-    await this.prisma.application.update({
-      where: { id: applicationId },
-      data: {
-        generationStatus: ApplicationGenerationStatus.PENDING,
-        generationError: null,
-      },
+    const app = await this.prisma.application.findFirst({
+      where: { id: applicationId, userId },
+      include: applicationDetailInclude,
     });
+    if (!app) {
+      throw new AppError('APPLICATION_NOT_FOUND', 'Application not found', 404);
+    }
 
-    await this.aiQueue.add(
-      'hybrid-ats-report',
-      { type: 'hybrid-ats-report', applicationId, userId },
-      {
-        jobId: `hybrid-ats-${applicationId}-${Date.now()}`,
-        attempts: 2,
-      },
-    );
+    const jd =
+      app.pastedJobDescription?.trim() ||
+      (app.jobSnapshot &&
+      typeof app.jobSnapshot === 'object' &&
+      !Array.isArray(app.jobSnapshot) &&
+      typeof (app.jobSnapshot as Record<string, unknown>).description === 'string'
+        ? String((app.jobSnapshot as Record<string, unknown>).description).trim()
+        : '');
+    if (!jd || !app.coverLetterContent?.trim()) {
+      throw new AppError(
+        'INVALID_OPERATION',
+        'Cover letter and job description are required to refresh the ATS report',
+        400,
+      );
+    }
+
+    // First-time MANUAL ATS: show package generating state.
+    // Refresh on COMPLETED AI/MANUAL packages: leave status alone (badge handles UX).
+    const needsInFlightStatus =
+      app.generationMode === ApplicationGenerationMode.MANUAL &&
+      app.generationStatus !== ApplicationGenerationStatus.COMPLETED;
+
+    if (needsInFlightStatus) {
+      await this.prisma.application.update({
+        where: { id: applicationId },
+        data: {
+          generationStatus: ApplicationGenerationStatus.PENDING,
+          generationError: null,
+        },
+      });
+    }
+
+    const jobId = `hybrid-ats-${applicationId}`;
+    const existing = await this.aiQueue.getJob(jobId);
+    let skipEnqueue = false;
+    if (existing) {
+      const state = await existing.getState();
+      if (state === 'active' || state === 'waiting' || state === 'delayed') {
+        skipEnqueue = true;
+      } else {
+        await existing.remove().catch(() => undefined);
+      }
+    }
+    if (!skipEnqueue) {
+      await this.aiQueue.add(
+        'hybrid-ats-report',
+        { type: 'hybrid-ats-report', applicationId, userId },
+        {
+          jobId,
+          attempts: 2,
+          removeOnComplete: 20,
+          removeOnFail: 20,
+        },
+      );
+    }
 
     return toApplicationResponse(
       await this.prisma.application.findFirstOrThrow({

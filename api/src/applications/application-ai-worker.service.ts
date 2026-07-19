@@ -14,6 +14,11 @@ import { preferencesFromMetadata } from '../shared/schemas/user.schema';
 import { UsageService } from '../users/usage.service';
 import { AiGenerationJobData } from '../queue/queue.constants';
 import { ApplicationSnapshotService } from './application-snapshot.service';
+import {
+  buildApplicationAtsFingerprint,
+  resolveCvTextForAts,
+  resolveJobDescriptionForAts,
+} from './application-ats.fingerprint';
 
 @Injectable()
 export class ApplicationAiWorkerService {
@@ -152,6 +157,14 @@ export class ApplicationAiWorkerService {
       cvText,
     });
 
+    const atsFingerprint = buildApplicationAtsFingerprint({
+      jobDescription,
+      coverLetter: coverLetter.coverLetter,
+      // Score against the CV the user currently has selected (not a draft they haven't chosen).
+      cvText,
+      cvChoice: app.cvChoice,
+    });
+
     // Keep pasted JD in snapshot.description when present so UI + regen stay aligned.
     const jobSnapshot: Record<string, unknown> = {
       ...bundle.jobSnapshot,
@@ -215,6 +228,7 @@ export class ApplicationAiWorkerService {
           keywordCoverage: ats.keywordCoverage,
           icpMatch: ats.icpMatch as Prisma.InputJsonValue,
           breakdown: ats.breakdown,
+          inputFingerprint: atsFingerprint,
           assessedAt: new Date(),
         },
         update: {
@@ -229,6 +243,7 @@ export class ApplicationAiWorkerService {
           keywordCoverage: ats.keywordCoverage,
           icpMatch: ats.icpMatch as Prisma.InputJsonValue,
           breakdown: ats.breakdown,
+          inputFingerprint: atsFingerprint,
           assessedAt: new Date(),
         },
       });
@@ -384,24 +399,36 @@ export class ApplicationAiWorkerService {
   private async runHybridAtsReport(job: AiGenerationJobData): Promise<void> {
     const app = await this.prisma.application.findFirstOrThrow({
       where: { id: job.applicationId, userId: job.userId },
-      include: { profile: { include: { currentCv: true } } },
+      include: {
+        profile: { include: { currentCv: true } },
+        generatedCv: true,
+      },
     });
 
-    const jd =
-      app.pastedJobDescription?.trim() ||
-      String(jsonField(app.jobSnapshot, 'description') ?? '');
-
+    const jd = resolveJobDescriptionForAts(app);
     if (!jd || !app.coverLetterContent) {
       throw new Error('Cover letter and job description required for ATS report');
     }
 
+    const cvText = resolveCvTextForAts(app);
     const ats = await this.atsReportGen.generate({
       jobTitle: app.jobRoleTitle ?? 'Role',
       companyName: app.companyName ?? 'Company',
       jobDescription: jd,
       coverLetter: app.coverLetterContent,
-      cvText: app.profile.currentCv?.parsedText ?? '',
+      cvText,
     });
+
+    const atsFingerprint = buildApplicationAtsFingerprint({
+      jobDescription: jd,
+      coverLetter: app.coverLetterContent,
+      cvText,
+      cvChoice: app.cvChoice,
+    });
+
+    const wasInFlight =
+      app.generationStatus === ApplicationGenerationStatus.PENDING ||
+      app.generationStatus === ApplicationGenerationStatus.PROCESSING;
 
     await this.prisma.$transaction(async (tx) => {
       await tx.applicationAtsReport.upsert({
@@ -419,6 +446,7 @@ export class ApplicationAiWorkerService {
           keywordCoverage: ats.keywordCoverage,
           icpMatch: ats.icpMatch as Prisma.InputJsonValue,
           breakdown: ats.breakdown,
+          inputFingerprint: atsFingerprint,
           assessedAt: new Date(),
         },
         update: {
@@ -433,17 +461,22 @@ export class ApplicationAiWorkerService {
           keywordCoverage: ats.keywordCoverage,
           icpMatch: ats.icpMatch as Prisma.InputJsonValue,
           breakdown: ats.breakdown,
+          inputFingerprint: atsFingerprint,
           assessedAt: new Date(),
         },
       });
 
-      await tx.application.update({
-        where: { id: app.id },
-        data: {
-          generationStatus: ApplicationGenerationStatus.COMPLETED,
-          generationError: null,
-        },
-      });
+      // ATS-only refresh on an already-COMPLETED AI package must not flip
+      // generationStatus to PENDING/COMPLETED churn in the UI.
+      if (wasInFlight) {
+        await tx.application.update({
+          where: { id: app.id },
+          data: {
+            generationStatus: ApplicationGenerationStatus.COMPLETED,
+            generationError: null,
+          },
+        });
+      }
     });
 
     await this.usage.incrementAiUsage(job.userId);

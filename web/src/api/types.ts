@@ -3,6 +3,12 @@ import type {
   SeniorityLevel,
 } from "@/lib/onboarding";
 
+/** User.metadata preferences returned/accepted by GET/PATCH /me */
+export type UserPreferences = {
+  /** When true, package generate also builds GeneratedCv. Default false. */
+  autoGenerateTailoredCv?: boolean;
+};
+
 export type MeResponse = {
   id: string;
   email: string;
@@ -20,6 +26,16 @@ export type MeResponse = {
     aiGenerationsUsedPeriod: number;
     aiGenerationsLimit: number | null;
   };
+  /** Typed preferences from User.metadata (absent keys → defaults). */
+  preferences?: UserPreferences;
+};
+
+export type PatchMeBody = {
+  name?: string;
+  imgUrl?: string | null;
+  linkedinUrl?: string | null;
+  githubUrl?: string | null;
+  preferences?: UserPreferences;
 };
 
 export type CvMeta = {
@@ -137,6 +153,8 @@ export type ApplicationAtsReport = {
   icpMatch: Record<string, unknown>;
   breakdown: Record<string, number>;
   assessedAt: string;
+  /** JD / letter / CV changed since this report was scored. */
+  stale?: boolean;
 };
 
 export type ApplicationStatus =

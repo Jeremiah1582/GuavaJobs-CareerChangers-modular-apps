@@ -46,6 +46,8 @@ export const applicationAtsReportSchema = z.object({
   icpMatch: z.record(z.unknown()),
   breakdown: z.record(z.number()),
   assessedAt: z.string().datetime(),
+  /** True when JD, letter, or CV used for scoring changed since assessedAt. */
+  stale: z.boolean().optional(),
 });
 
 export const applicationEventSummarySchema = z.object({

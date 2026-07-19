@@ -462,7 +462,10 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
                     <div />
                   )}
                   {showAts ? (
-                    <AtsReportPanel report={app.atsReport!} />
+                    <AtsReportPanel
+                      applicationId={app.id}
+                      report={app.atsReport!}
+                    />
                   ) : isAi && completed ? (
                     <PaperPanel className="border-guava-green/20 p-6">
                       <h2 className="text-base font-semibold tracking-tight">

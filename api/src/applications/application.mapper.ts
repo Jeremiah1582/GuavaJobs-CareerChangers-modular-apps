@@ -13,13 +13,18 @@ import {
   generatedCvStoredContentSchema,
   hydrateGeneratedCvContent,
 } from '../shared/schemas/generated-cv.schema';
+import {
+  buildApplicationAtsFingerprint,
+  resolveCvTextForAts,
+  resolveJobDescriptionForAts,
+} from './application-ats.fingerprint';
 
 type ApplicationWithRelations = Application & {
   atsReport?: ApplicationAtsReport | null;
   events?: ApplicationEvent[];
   generatedCv?: GeneratedCv | null;
   user?: User | null;
-  profile?: Profile | null;
+  profile?: (Profile & { currentCv?: { parsedText: string | null } | null }) | null;
 };
 
 export function toApplicationResponse(
@@ -98,7 +103,9 @@ export function toApplicationResponse(
     generatedCv,
     generatedCvExport,
     appliedAt: app.appliedAt?.toISOString() ?? null,
-    atsReport: app.atsReport ? toAtsReportResponse(app.atsReport) : null,
+    atsReport: app.atsReport
+      ? toAtsReportResponse(app.atsReport, isAtsReportStale(app))
+      : null,
     events: includeEvents
       ? (app.events ?? []).map((e) => ({
           id: e.id,
@@ -170,7 +177,23 @@ function parseStoredCvContent(raw: unknown): GeneratedCvStoredContent {
   return generatedCvStoredContentSchema.parse(raw);
 }
 
-function toAtsReportResponse(report: ApplicationAtsReport) {
+function isAtsReportStale(app: ApplicationWithRelations): boolean {
+  if (!app.atsReport) return false;
+  const stored = app.atsReport.inputFingerprint;
+  if (!stored) {
+    // Legacy reports without fingerprint: treat as stale so user can refresh once.
+    return true;
+  }
+  const current = buildApplicationAtsFingerprint({
+    jobDescription: resolveJobDescriptionForAts(app),
+    coverLetter: app.coverLetterContent ?? '',
+    cvText: resolveCvTextForAts(app),
+    cvChoice: app.cvChoice,
+  });
+  return current !== stored;
+}
+
+function toAtsReportResponse(report: ApplicationAtsReport, stale: boolean) {
   return {
     score: report.score,
     letterScore: report.letterScore,
@@ -184,6 +207,7 @@ function toAtsReportResponse(report: ApplicationAtsReport) {
     icpMatch: jsonRecord(report.icpMatch) ?? {},
     breakdown: jsonNumberRecord(report.breakdown),
     assessedAt: report.assessedAt.toISOString(),
+    stale,
   };
 }
 
@@ -218,12 +242,12 @@ export const applicationDetailInclude = {
   atsReport: true,
   generatedCv: true,
   user: true,
-  profile: true,
+  profile: { include: { currentCv: true } },
 } as const;
 
 export const applicationListInclude = {
   atsReport: true,
   generatedCv: true,
   user: true,
-  profile: true,
+  profile: { include: { currentCv: true } },
 } as const;
