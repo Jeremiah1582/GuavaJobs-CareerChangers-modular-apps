@@ -31,4 +31,8 @@ export class MockStorageService {
       expiresInSeconds,
     };
   }
+
+  async removeObject(storageKey: string): Promise<void> {
+    this.objects.delete(storageKey);
+  }
 }

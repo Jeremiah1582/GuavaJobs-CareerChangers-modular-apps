@@ -134,4 +134,24 @@ export class StorageService implements OnModuleInit {
 
     return { signedUrl, expiresInSeconds };
   }
+
+  /** Best-effort delete — missing objects are treated as success. */
+  async removeObject(storageKey: string): Promise<void> {
+    const res = await fetch(
+      `${this.supabaseUrl}/storage/v1/object/${this.bucket}/${storageKey}`,
+      {
+        method: 'DELETE',
+        headers: this.authHeaders(),
+      },
+    );
+
+    if (res.ok || res.status === 404) {
+      return;
+    }
+
+    const text = await res.text();
+    this.logger.warn(
+      `Storage delete failed for "${storageKey}": ${res.status} ${text}`,
+    );
+  }
 }

@@ -23,6 +23,7 @@ export const AnalyticsEvents = {
   apply_deferred: "apply_deferred",
   event_added: "event_added",
   event_deleted: "event_deleted",
+  application_deleted: "application_deleted",
   manual_application_created: "manual_application_created",
   pdf_exported: "pdf_exported",
 } as const;

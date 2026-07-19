@@ -17,6 +17,7 @@ import { ApplicationSnapshotService } from './application-snapshot.service';
 import {
   buildApplicationAtsFingerprint,
   resolveCvTextForAts,
+  resolveCvTextForGeneration,
   resolveJobDescriptionForAts,
 } from './application-ats.fingerprint';
 
@@ -36,10 +37,28 @@ export class ApplicationAiWorkerService {
   ) {}
 
   async process(job: AiGenerationJobData): Promise<void> {
-    await this.prisma.application.update({
-      where: { id: job.applicationId },
-      data: { generationStatus: ApplicationGenerationStatus.PROCESSING },
-    });
+    // Package jobs always enter PROCESSING. Side-effect hybrids (CV / ATS)
+    // must not flip a COMPLETED package into regenerating UI — only promote
+    // PENDING → PROCESSING when the enqueue path already marked in-flight.
+    if (job.type === 'generate' || job.type === 'regenerate') {
+      await this.prisma.application.update({
+        where: { id: job.applicationId },
+        data: { generationStatus: ApplicationGenerationStatus.PROCESSING },
+      });
+    } else if (job.type === 'hybrid-cover-letter') {
+      await this.prisma.application.update({
+        where: { id: job.applicationId },
+        data: { generationStatus: ApplicationGenerationStatus.PROCESSING },
+      });
+    } else {
+      await this.prisma.application.updateMany({
+        where: {
+          id: job.applicationId,
+          generationStatus: ApplicationGenerationStatus.PENDING,
+        },
+        data: { generationStatus: ApplicationGenerationStatus.PROCESSING },
+      });
+    }
 
     try {
       switch (job.type) {
@@ -63,13 +82,36 @@ export class ApplicationAiWorkerService {
       const message =
         error instanceof Error ? error.message : 'AI generation failed';
       this.logger.error(`Job ${job.type} failed for ${job.applicationId}: ${message}`);
-      await this.prisma.application.update({
-        where: { id: job.applicationId },
-        data: {
-          generationStatus: ApplicationGenerationStatus.FAILED,
-          generationError: message,
-        },
-      });
+
+      if (
+        job.type === 'hybrid-generate-cv' ||
+        job.type === 'hybrid-ats-report'
+      ) {
+        // Leave COMPLETED packages intact; only fail true in-flight hybrids.
+        await this.prisma.application.updateMany({
+          where: {
+            id: job.applicationId,
+            generationStatus: {
+              in: [
+                ApplicationGenerationStatus.PENDING,
+                ApplicationGenerationStatus.PROCESSING,
+              ],
+            },
+          },
+          data: {
+            generationStatus: ApplicationGenerationStatus.FAILED,
+            generationError: message,
+          },
+        });
+      } else {
+        await this.prisma.application.update({
+          where: { id: job.applicationId },
+          data: {
+            generationStatus: ApplicationGenerationStatus.FAILED,
+            generationError: message,
+          },
+        });
+      }
       throw error;
     }
   }
@@ -488,23 +530,18 @@ export class ApplicationAiWorkerService {
       include: { profile: { include: { currentCv: true } } },
     });
 
-    if (app.generationMode !== ApplicationGenerationMode.MANUAL) {
-      throw new Error('Hybrid generated CV requires MANUAL application');
-    }
-
-    const jd =
-      app.pastedJobDescription?.trim() ||
-      String(jsonField(app.jobSnapshot, 'description') ?? '');
-
+    const jd = resolveJobDescriptionForAts(app);
     if (!jd) {
-      throw new Error('pastedJobDescription is required');
+      throw new Error('Job description is required');
     }
 
-    const cvText = app.profile.currentCv?.parsedText ?? '';
+    const cvText = resolveCvTextForGeneration(app);
     if (!cvText) {
       throw new Error('Profile CV with parsed text is required');
     }
 
+    // CV-only: never touch package generationStatus. Full regenerate is
+    // POST …/regenerate. Only upsert GeneratedCv + switch cvChoice.
     const generatedCv = await this.generatedCvGen.generate({
       jobTitle: app.jobRoleTitle ?? 'Role',
       companyName: app.companyName ?? 'Company',
@@ -517,6 +554,12 @@ export class ApplicationAiWorkerService {
       cvText,
     });
 
+    const sourceCvDocumentId =
+      app.profile.currentCv?.id ??
+      (typeof jsonField(app.cvSnapshot, 'cvDocumentId') === 'string'
+        ? String(jsonField(app.cvSnapshot, 'cvDocumentId'))
+        : null);
+
     await this.prisma.$transaction(async (tx) => {
       await tx.generatedCv.upsert({
         where: { applicationId: app.id },
@@ -524,13 +567,13 @@ export class ApplicationAiWorkerService {
           userId: job.userId,
           applicationId: app.id,
           profileId: app.profileId,
-          sourceCvDocumentId: app.profile.currentCv?.id ?? null,
+          sourceCvDocumentId,
           content: generatedCv.content as Prisma.InputJsonValue,
           edited: false,
           templateId: 'json-ats-v1',
         },
         update: {
-          sourceCvDocumentId: app.profile.currentCv?.id ?? null,
+          sourceCvDocumentId,
           content: generatedCv.content as Prisma.InputJsonValue,
           edited: false,
         },
@@ -538,11 +581,7 @@ export class ApplicationAiWorkerService {
 
       await tx.application.update({
         where: { id: app.id },
-        data: {
-          cvChoice: 'GENERATED',
-          generationStatus: ApplicationGenerationStatus.COMPLETED,
-          generationError: null,
-        },
+        data: { cvChoice: 'GENERATED' },
       });
     });
 

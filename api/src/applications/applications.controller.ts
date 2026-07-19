@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Headers,
   HttpCode,
@@ -104,6 +105,15 @@ export class ApplicationsController {
     return this.applications.patch(user.id, id, body);
   }
 
+  @Delete(':id')
+  @ApiOperation({
+    summary:
+      'Permanently delete application (cascades ATS report, tailored CV, events; profile kept)',
+  })
+  remove(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.applications.remove(user.id, id);
+  }
+
   @Post(':id/regenerate')
   @HttpCode(202)
   @ApiOperation({ summary: 'Enqueue AI regenerate (async overwrite)' })
@@ -135,7 +145,9 @@ export class ApplicationsController {
 
   @Post(':id/generate-cv')
   @HttpCode(202)
-  @ApiOperation({ summary: 'Manual hybrid — AI tailored CV JSON from pasted JD' })
+  @ApiOperation({
+    summary: 'On-demand tailored CV JSON from job description (AI or manual)',
+  })
   hybridGenerateCv(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id') id: string,

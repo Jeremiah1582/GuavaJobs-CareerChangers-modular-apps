@@ -7,6 +7,7 @@ import {
   CaretDoubleLeft,
   CaretDoubleRight,
   ClipboardText,
+  GearSix,
   SignOut,
   UserCircle,
 } from "@phosphor-icons/react";
@@ -20,6 +21,7 @@ const links = [
   { href: "/app/jobs", label: "Jobs", icon: Briefcase },
   { href: "/app/applications", label: "Applications", icon: ClipboardText },
   { href: "/app/profile", label: "Profile", icon: UserCircle },
+  { href: "/app/settings", label: "Settings", icon: GearSix },
 ] as const;
 
 const STORAGE_KEY = "gj_sidebar_collapsed";

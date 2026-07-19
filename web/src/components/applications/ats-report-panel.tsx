@@ -140,7 +140,7 @@ export function AtsReportPanel({
           <span>
             {refreshing
               ? "Updating fit report…"
-              : "Update required — update now"}
+              : "click to update"}
           </span>
         </button>
       ) : null}

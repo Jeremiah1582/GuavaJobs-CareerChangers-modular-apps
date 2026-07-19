@@ -1,6 +1,7 @@
 import {
   buildApplicationAtsFingerprint,
   resolveCvTextForAts,
+  resolveCvTextForGeneration,
   resolveJobDescriptionForAts,
 } from './application-ats.fingerprint';
 
@@ -36,5 +37,20 @@ describe('application-ats.fingerprint', () => {
       generatedCv: { content: { label: 'Engineer', work: [] } },
     });
     expect(text).toContain('Engineer');
+  });
+
+  it('resolveCvTextForGeneration prefers live profile CV over snapshot', () => {
+    expect(
+      resolveCvTextForGeneration({
+        cvSnapshot: { parsedText: 'stale snapshot' },
+        profile: { currentCv: { parsedText: ' latest upload ' } },
+      }),
+    ).toBe('latest upload');
+    expect(
+      resolveCvTextForGeneration({
+        cvSnapshot: { parsedText: 'from snapshot' },
+        profile: { currentCv: { parsedText: null } },
+      }),
+    ).toBe('from snapshot');
   });
 });

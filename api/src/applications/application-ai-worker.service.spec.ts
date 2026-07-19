@@ -442,3 +442,132 @@ describe('ApplicationAiWorkerService.runFullGenerate', () => {
     );
   });
 });
+
+describe('ApplicationAiWorkerService.hybrid-generate-cv', () => {
+  let service: ApplicationAiWorkerService;
+  let prisma: {
+    application: {
+      update: jest.Mock;
+      updateMany: jest.Mock;
+      findFirstOrThrow: jest.Mock;
+    };
+    generatedCv: { upsert: jest.Mock };
+    $transaction: jest.Mock;
+  };
+  let generatedCvGen: { generate: jest.Mock };
+  let usage: { incrementAiUsage: jest.Mock };
+
+  beforeEach(() => {
+    prisma = {
+      application: {
+        update: jest.fn().mockResolvedValue({}),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+        findFirstOrThrow: jest.fn().mockResolvedValue({
+          id: 'app_1',
+          userId: 'user_1',
+          profileId: 'profile_1',
+          generationStatus: 'COMPLETED',
+          generationMode: 'AI',
+          jobRoleTitle: 'Backend Engineer',
+          companyName: 'Acme',
+          pastedJobDescription: 'Build APIs with TypeScript and NestJS',
+          jobSnapshot: { description: 'Snapshot JD' },
+          cvSnapshot: { parsedText: 'stale', cvDocumentId: 'cv_old' },
+          cvChoice: 'UPLOADED',
+          profile: {
+            jobTitle: 'Engineer',
+            summary: 'Builds APIs',
+            skills: ['TypeScript'],
+            currentCv: { id: 'cv_1', parsedText: 'Latest CV text' },
+          },
+        }),
+      },
+      generatedCv: { upsert: jest.fn() },
+      $transaction: jest.fn(async (fn: (tx: typeof prisma) => Promise<void>) =>
+        fn(prisma),
+      ),
+    };
+    generatedCvGen = {
+      generate: jest.fn().mockResolvedValue({ content: sampleCvContent }),
+    };
+    usage = { incrementAiUsage: jest.fn().mockResolvedValue(undefined) };
+
+    service = new ApplicationAiWorkerService(
+      prisma as unknown as PrismaService,
+      { getByCanonicalKey: jest.fn() } as unknown as JobsService,
+      { buildForGenerate: jest.fn() } as unknown as ApplicationSnapshotService,
+      { generate: jest.fn() } as unknown as CoverLetterGenerator,
+      generatedCvGen as unknown as GeneratedCvGenerator,
+      { generate: jest.fn() } as unknown as AtsReportGenerator,
+      new JobFactsParser(),
+      usage as unknown as UsageService,
+    );
+  });
+
+  it('generates CV only without flipping package generationStatus', async () => {
+    await service.process({
+      type: 'hybrid-generate-cv',
+      applicationId: 'app_1',
+      userId: 'user_1',
+    });
+
+    expect(generatedCvGen.generate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cvText: 'Latest CV text',
+        jobDescription: 'Build APIs with TypeScript and NestJS',
+      }),
+    );
+    expect(prisma.generatedCv.upsert).toHaveBeenCalled();
+    expect(prisma.application.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { cvChoice: 'GENERATED' },
+      }),
+    );
+    // Completed packages must not enter PROCESSING / COMPLETED churn.
+    expect(prisma.application.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          generationStatus: 'PROCESSING',
+        }),
+      }),
+    );
+    expect(prisma.application.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          generationStatus: 'COMPLETED',
+        }),
+      }),
+    );
+    expect(usage.incrementAiUsage).toHaveBeenCalledWith('user_1');
+  });
+
+  it('does not mark COMPLETED packages FAILED when CV generation errors', async () => {
+    generatedCvGen.generate.mockRejectedValue(new Error('LLM timeout'));
+
+    await expect(
+      service.process({
+        type: 'hybrid-generate-cv',
+        applicationId: 'app_1',
+        userId: 'user_1',
+      }),
+    ).rejects.toThrow('LLM timeout');
+
+    expect(prisma.application.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: 'app_1',
+          generationStatus: {
+            in: ['PENDING', 'PROCESSING'],
+          },
+        }),
+      }),
+    );
+    expect(prisma.application.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          generationStatus: 'FAILED',
+        }),
+      }),
+    );
+  });
+});

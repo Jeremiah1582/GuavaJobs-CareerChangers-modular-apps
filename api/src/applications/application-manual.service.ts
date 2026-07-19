@@ -12,6 +12,10 @@ import { AI_GENERATION_QUEUE, AiGenerationJobData } from '../queue/queue.constan
 import { AppError } from '../shared/schemas/error.schema';
 import { CreateManualApplicationInput } from '../shared/schemas/application.schema';
 import { UsageService } from '../users/usage.service';
+import {
+  resolveCvTextForGeneration,
+  resolveJobDescriptionForAts,
+} from './application-ats.fingerprint';
 import { toApplicationResponse, applicationDetailInclude } from './application.mapper';
 
 @Injectable()
@@ -230,13 +234,17 @@ export class ApplicationManualService {
     pastedJobDescription?: string,
   ) {
     await this.usage.assertCanGenerateAi(userId);
-    const app = await this.findManual(userId, applicationId);
+    const app = await this.findOwned(userId, applicationId);
 
     const profile = await this.prisma.profile.findFirst({
       where: { id: app.profileId, userId },
       include: { currentCv: true },
     });
-    if (!profile?.currentCv?.parsedText) {
+    const cvText = resolveCvTextForGeneration({
+      cvSnapshot: app.cvSnapshot,
+      profile,
+    });
+    if (!cvText) {
       throw new AppError(
         'CV_REQUIRED',
         'Upload and parse a CV before generating a tailored CV',
@@ -249,24 +257,43 @@ export class ApplicationManualService {
         where: { id: applicationId },
         data: { pastedJobDescription },
       });
+      app.pastedJobDescription = pastedJobDescription;
     }
 
-    await this.prisma.application.update({
-      where: { id: applicationId },
-      data: {
-        generationStatus: ApplicationGenerationStatus.PENDING,
-        generationError: null,
-      },
-    });
+    const jd = resolveJobDescriptionForAts(app);
+    if (!jd) {
+      throw new AppError(
+        'INVALID_OPERATION',
+        'Job description is required to generate a tailored CV',
+        400,
+      );
+    }
 
-    await this.aiQueue.add(
-      'hybrid-generate-cv',
-      { type: 'hybrid-generate-cv', applicationId, userId },
-      {
-        jobId: `hybrid-cv-${applicationId}-${Date.now()}`,
-        attempts: 2,
-      },
-    );
+    // CV-only path: never flip package generationStatus (keeps letter/ATS UI
+    // stable). Deduplicate concurrent clicks with a stable Bull job id.
+    const jobId = `hybrid-cv-${applicationId}`;
+    const existing = await this.aiQueue.getJob(jobId);
+    let skipEnqueue = false;
+    if (existing) {
+      const state = await existing.getState();
+      if (state === 'active' || state === 'waiting' || state === 'delayed') {
+        skipEnqueue = true;
+      } else {
+        await existing.remove().catch(() => undefined);
+      }
+    }
+    if (!skipEnqueue) {
+      await this.aiQueue.add(
+        'hybrid-generate-cv',
+        { type: 'hybrid-generate-cv', applicationId, userId },
+        {
+          jobId,
+          attempts: 2,
+          removeOnComplete: 20,
+          removeOnFail: 20,
+        },
+      );
+    }
 
     return toApplicationResponse(
       await this.prisma.application.findFirstOrThrow({
@@ -277,18 +304,23 @@ export class ApplicationManualService {
   }
 
   private async findManual(userId: string, applicationId: string) {
-    const app = await this.prisma.application.findFirst({
-      where: { id: applicationId, userId },
-    });
-    if (!app) {
-      throw new AppError('APPLICATION_NOT_FOUND', 'Application not found', 404);
-    }
+    const app = await this.findOwned(userId, applicationId);
     if (app.generationMode !== ApplicationGenerationMode.MANUAL) {
       throw new AppError(
         'INVALID_OPERATION',
         'Hybrid AI endpoints require MANUAL applications',
         400,
       );
+    }
+    return app;
+  }
+
+  private async findOwned(userId: string, applicationId: string) {
+    const app = await this.prisma.application.findFirst({
+      where: { id: applicationId, userId },
+    });
+    if (!app) {
+      throw new AppError('APPLICATION_NOT_FOUND', 'Application not found', 404);
     }
     return app;
   }

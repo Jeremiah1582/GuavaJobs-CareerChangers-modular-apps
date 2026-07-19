@@ -1,8 +1,13 @@
 import { Injectable } from '@nestjs/common';
-import { Profile, User, UserTier } from '@prisma/client';
+import { Prisma, Profile, User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppError } from '../shared/schemas/error.schema';
-import { PatchMeInput, UserResponse } from '../shared/schemas/user.schema';
+import {
+  mergePreferencesIntoMetadata,
+  PatchMeInput,
+  preferencesFromMetadata,
+  UserResponse,
+} from '../shared/schemas/user.schema';
 import { UsageService } from './usage.service';
 
 type UserWithDefaultProfile = User & {
@@ -44,10 +49,33 @@ export class UsersService {
   }
 
   async patchMe(userId: string, input: PatchMeInput): Promise<UserResponse> {
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: input,
-    });
+    const { preferences, ...scalars } = input;
+
+    if (preferences !== undefined) {
+      const current = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { metadata: true },
+      });
+      if (!current) {
+        throw new AppError('USER_NOT_FOUND', 'User not found', 404);
+      }
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          ...scalars,
+          metadata: mergePreferencesIntoMetadata(
+            current.metadata,
+            preferences,
+          ) as Prisma.InputJsonValue,
+        },
+      });
+    } else {
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: scalars,
+      });
+    }
+
     return this.getMe(userId);
   }
 
@@ -82,6 +110,7 @@ export class UsersService {
         aiGenerationsLimit: usage.aiGenerationsLimit,
         usagePeriodStart: usage.usagePeriodStart?.toISOString() ?? null,
       },
+      preferences: preferencesFromMetadata(user.metadata),
       createdAt: user.createdAt.toISOString(),
       updatedAt: user.updatedAt.toISOString(),
     };

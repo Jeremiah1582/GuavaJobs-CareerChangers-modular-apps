@@ -189,7 +189,8 @@ export interface paths {
         get: operations["ApplicationsController_getById"];
         put?: never;
         post?: never;
-        delete?: never;
+        /** Permanently delete application (cascades related package data) */
+        delete: operations["ApplicationsController_remove"];
         options?: never;
         head?: never;
         /** Update status, normalized fields, or cover letter */
@@ -627,6 +628,25 @@ export interface operations {
         };
     };
     ApplicationsController_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ApplicationsController_remove: {
         parameters: {
             query?: never;
             header?: never;

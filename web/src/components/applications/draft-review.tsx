@@ -14,13 +14,23 @@ import { apiFetch, ApiError } from "@/api/client";
 import {
   isGeneratingStatus,
   type ApplicationResponse,
+  type MeResponse,
 } from "@/api/types";
 import { ApplyPanel } from "@/components/applications/apply-panel";
 import { AtsReportPanel } from "@/components/applications/ats-report-panel";
 import { CoverLetterEditor } from "@/components/applications/cover-letter-editor";
 import { GenerateCta } from "@/components/applications/generate-cta";
-import { GeneratedCvPanel } from "@/components/applications/generated-cv-panel";
+import {
+  CvChoiceToggle,
+  GenerateTailoredCvButton,
+  GeneratedCvPanel,
+} from "@/components/applications/generated-cv-panel";
 import { HybridAiPanel } from "@/components/applications/hybrid-ai-panel";
+import { JobDescriptionPanel } from "@/components/applications/job-description-panel";
+import {
+  ProgressRing,
+  type ProgressStage,
+} from "@/components/applications/progress-ring";
 import { QuotaSheet } from "@/components/applications/quota-sheet";
 import { StatusAndEvents } from "@/components/applications/status-and-events";
 import { StatusChip } from "@/components/applications/status-chip";
@@ -33,16 +43,20 @@ import {
 } from "@/lib/applications";
 import { getAccessToken } from "@/lib/session";
 
+type DeskTab = "overview" | "letter" | "fit" | "cv" | "track";
+
 function GeneratingState({
   status,
   stuck,
   onRetry,
   retrying,
+  includeCv,
 }: {
   status: string;
   stuck: boolean;
   onRetry: () => void;
   retrying: boolean;
+  includeCv: boolean;
 }) {
   return (
     <PaperPanel className="border-guava-green/20 p-8 text-center md:p-12">
@@ -56,7 +70,9 @@ function GeneratingState({
       <p className="mx-auto mt-2 max-w-[40ch] text-sm leading-relaxed text-muted-foreground">
         {stuck
           ? "This is taking longer than usual. The worker may have missed the job. Retry re-queues without using an extra credit while status is still pending."
-          : "Cover letter, tailored CV, and fit report are generating from your profile and CV. This usually takes under a minute."}
+          : includeCv
+            ? "Cover letter, tailored CV, and fit report are generating from your profile and CV. This usually takes under a minute."
+            : "Cover letter and fit report are generating from your profile and CV. This usually takes under a minute."}
       </p>
       <p className="mt-4 font-mono text-xs uppercase tracking-wide text-muted-foreground">
         {status}
@@ -83,11 +99,13 @@ function GeneratingState({
 function RegenerateConfirm({
   open,
   busy,
+  includeCv,
   onCancel,
   onConfirm,
 }: {
   open: boolean;
   busy: boolean;
+  includeCv: boolean;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
@@ -119,8 +137,10 @@ function RegenerateConfirm({
               Regenerate this package?
             </h2>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              This uses one AI generation credit and overwrites the cover
-              letter, tailored CV, fit report, and job/profile/CV snapshots.
+              This uses one AI generation credit and overwrites the{" "}
+              {includeCv
+                ? "cover letter, tailored CV, fit report, and job/profile/CV snapshots."
+                : "cover letter, fit report, and job/profile/CV snapshots."}
             </p>
             <div className="mt-6 flex flex-col gap-2 sm:flex-row">
               <button
@@ -152,6 +172,160 @@ function RegenerateConfirm({
   );
 }
 
+function applicationProgressStages(app: ApplicationResponse): ProgressStage[] {
+  return [
+    { label: "Materials", done: !!app.coverLetterContent },
+    { label: "CV", done: !!app.cvSnapshot || !!app.generatedCv },
+    { label: "Apply", done: app.status !== "DRAFT" },
+  ];
+}
+
+/** Full pre-desk stacked materials — Overview mounts real panels, not summaries. */
+function OverviewMaterials({
+  app,
+  showLetter,
+  showAts,
+  showCv,
+  savePending,
+  saveError,
+  cvChoiceBusy,
+  onSaveLetter,
+  onCvChoiceChange,
+}: {
+  app: ApplicationResponse;
+  showLetter: boolean;
+  showAts: boolean;
+  showCv: boolean;
+  savePending: boolean;
+  saveError: string | null;
+  cvChoiceBusy: boolean;
+  onSaveLetter: (next: string) => Promise<void>;
+  onCvChoiceChange: (choice: "UPLOADED" | "GENERATED") => void;
+}) {
+  const isAi = app.generationMode === "AI";
+  const completed = app.generationStatus === "COMPLETED";
+
+  return (
+    <div className="space-y-6">
+      {showLetter || showAts ? (
+        <div className="grid gap-6 md:grid-cols-2 md:items-start">
+          {showLetter ? (
+            <CoverLetterEditor
+              content={app.coverLetterContent ?? ""}
+              edited={app.coverLetterEdited}
+              saving={savePending}
+              saveError={saveError}
+              onSave={onSaveLetter}
+            />
+          ) : (
+            <div />
+          )}
+          {showAts ? (
+            app.atsReport ? (
+              <AtsReportPanel
+                applicationId={app.id}
+                report={app.atsReport}
+              />
+            ) : isAi && completed ? (
+              <PaperPanel className="border-guava-green/20 p-6">
+                <h2 className="text-base font-semibold tracking-tight">
+                  Fit report
+                </h2>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  No ATS report attached. Regenerate to produce a fresh fit
+                  assessment.
+                </p>
+              </PaperPanel>
+            ) : null
+          ) : null}
+        </div>
+      ) : null}
+
+      {showCv ? (
+        <GeneratedCvPanel
+          app={app}
+          cvChoice={app.cvChoice ?? "UPLOADED"}
+          onCvChoiceChange={onCvChoiceChange}
+          choiceBusy={cvChoiceBusy}
+        />
+      ) : null}
+
+      <StatusAndEvents
+        key={`${app.id}-${app.status}-${app.updatedAt}`}
+        app={app}
+      />
+    </div>
+  );
+}
+
+function DeskTabs({
+  tab,
+  onChange,
+  showLetter,
+  showFit,
+  showCv,
+}: {
+  tab: DeskTab;
+  onChange: (t: DeskTab) => void;
+  showLetter: boolean;
+  showFit: boolean;
+  showCv: boolean;
+}) {
+  const items: { id: DeskTab; label: string; show: boolean }[] = [
+    { id: "overview", label: "Overview", show: true },
+    { id: "letter", label: "Letter", show: showLetter },
+    { id: "fit", label: "Fit", show: showFit },
+    { id: "cv", label: "CV", show: showCv },
+    { id: "track", label: "Track", show: true },
+  ];
+  const visible = items.filter((i) => i.show);
+
+  return (
+    <div
+      className="inline-flex flex-wrap gap-1 rounded-xl border border-guava-green/15 bg-white/80 p-1"
+      role="tablist"
+      aria-label="Application materials"
+    >
+      {visible.map((item) => {
+        const active = tab === item.id;
+        return (
+          <button
+            key={item.id}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(item.id)}
+            className={[
+              "rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors active:scale-[0.98]",
+              active
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            ].join(" ")}
+          >
+            {item.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function DeskSkeleton() {
+  return (
+    <div className="space-y-6" aria-hidden>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="h-10 w-48 animate-pulse rounded-xl bg-white/50" />
+        <div className="h-14 w-40 animate-pulse rounded-xl bg-white/50" />
+      </div>
+      <div className="h-20 animate-pulse rounded-2xl border border-guava-green/10 bg-white/50" />
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_17.5rem]">
+        <div className="h-72 animate-pulse rounded-2xl border border-guava-green/10 bg-white/50" />
+        <div className="h-64 animate-pulse rounded-2xl border border-guava-green/10 bg-white/50" />
+      </div>
+    </div>
+  );
+}
+
 export function DraftReview({ applicationId }: { applicationId: string }) {
   const queryClient = useQueryClient();
   const trackedTerminal = useRef<string | null>(null);
@@ -161,6 +335,7 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
   const [cvChoiceBusy, setCvChoiceBusy] = useState(false);
   const [generatingSince, setGeneratingSince] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const [tab, setTab] = useState<DeskTab>("overview");
 
   const appQuery = useQuery({
     queryKey: ["application", applicationId] as const,
@@ -174,6 +349,18 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
       isGeneratingStatus(q.state.data?.generationStatus) ? 2500 : false,
     retry: 1,
   });
+
+  const meQuery = useQuery({
+    queryKey: ["me"] as const,
+    queryFn: async () => {
+      const token = await getAccessToken();
+      return apiFetch<MeResponse>("/me", { token });
+    },
+    staleTime: 60_000,
+  });
+
+  const autoGenerateCv =
+    meQuery.data?.preferences?.autoGenerateTailoredCv === true;
 
   useEffect(() => {
     if (appQuery.data) setHasApplicationsCookie(true);
@@ -195,7 +382,7 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
   }, [generatingSince]);
 
   const stuckGenerating =
-    generatingSince != null && now - generatingSince >= 60_000;
+    generatingSince != null && now - generatingSince >= 90_000;
 
   useEffect(() => {
     const app = appQuery.data;
@@ -245,9 +432,6 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
           events: data.events ?? old?.events,
         }),
       );
-      void queryClient.invalidateQueries({
-        queryKey: ["application", applicationId],
-      });
       track(AnalyticsEvents.letter_edited, { applicationId: data.id });
     },
     onError: (err) => {
@@ -321,14 +505,21 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
   const completed = app?.generationStatus === "COMPLETED";
   const isManual = app?.generationMode === "MANUAL";
   const isAi = app?.generationMode === "AI";
-  const showLetter =
-    !!app?.coverLetterContent || (completed && isAi);
+  const showLetter = !!app?.coverLetterContent || (completed && isAi);
+  const showAts = !!app?.atsReport || (completed && isAi);
   const showCv =
-    !!app?.cvSnapshot || !!app?.generatedCv || (completed && isAi);
-  const showAts = !!app?.atsReport;
+    !!app?.cvSnapshot || !!app?.generatedCv || (completed && isAi) || isManual;
   const title = app ? applicationTitle(app) : "Application";
   const company = app ? applicationCompany(app) : null;
   const canRegen = isAi && (completed || failed) && !generating;
+  const hasGenerated = !!app?.generatedCv?.content;
+
+  useEffect(() => {
+    if (!app) return;
+    if (tab === "letter" && !showLetter) setTab("overview");
+    else if (tab === "fit" && !showAts) setTab("overview");
+    else if (tab === "cv" && !showCv) setTab("overview");
+  }, [app, tab, showLetter, showAts, showCv]);
 
   return (
     <div className="space-y-6">
@@ -341,10 +532,7 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
       </Link>
 
       {appQuery.isLoading ? (
-        <div
-          className="h-64 animate-pulse rounded-2xl border border-guava-green/10 bg-white/50"
-          aria-hidden
-        />
+        <DeskSkeleton />
       ) : appQuery.isError ? (
         <PaperPanel className="border-destructive/30 p-6">
           <p className="text-sm text-destructive" role="alert">
@@ -358,35 +546,34 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
         </PaperPanel>
       ) : app ? (
         <>
+          {/* Compact job header + progress ring */}
           <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
+            <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
+                <h1 className="text-xl font-semibold tracking-tight md:text-2xl">
                   {title}
                 </h1>
                 <StatusChip status={app.status} />
               </div>
               {company ? (
-                <p className="mt-1 text-lg text-muted-foreground">{company}</p>
+                <p className="mt-0.5 text-base text-muted-foreground">
+                  {company}
+                </p>
               ) : null}
-              <p className="mt-2 text-sm text-muted-foreground">
-                {isManual
-                  ? "Manual tracker entry — apply and log progress here"
-                  : "Review, apply externally, then track what happens next"}
-              </p>
             </div>
-            {canRegen ? (
-              <button
-                type="button"
-                onClick={() => setRegenOpen(true)}
-                disabled={regenMutation.isPending}
-                className="inline-flex items-center gap-2 rounded-xl border border-guava-green/25 bg-white/80 px-4 py-2.5 text-sm font-medium transition-colors hover:border-guava-green/45"
-              >
-                <ArrowClockwise className="size-4" weight="bold" />
-                Regenerate
-              </button>
+            {!generating ? (
+              <ProgressRing stages={applicationProgressStages(app)} />
             ) : null}
           </div>
+
+          {/* Full-width JD — collapsed by default */}
+          {!generating ? (
+            <JobDescriptionPanel
+              app={app}
+              canRegenerate={canRegen}
+              onRequestRegenerate={() => setRegenOpen(true)}
+            />
+          ) : null}
 
           {generating ? (
             <GeneratingState
@@ -394,6 +581,7 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
               stuck={stuckGenerating}
               retrying={regenMutation.isPending}
               onRetry={() => regenMutation.mutate()}
+              includeCv={autoGenerateCv || hasGenerated}
             />
           ) : null}
 
@@ -446,51 +634,124 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
 
               {isManual ? <HybridAiPanel app={app} /> : null}
 
-              {(showLetter || showAts) && (
-                <div className="grid gap-6 md:grid-cols-2 md:items-start">
-                  {showLetter ? (
-                    <CoverLetterEditor
-                      content={app.coverLetterContent ?? ""}
-                      edited={app.coverLetterEdited}
-                      saving={saveMutation.isPending}
-                      saveError={saveError}
-                      onSave={async (next) => {
-                        await saveMutation.mutateAsync(next);
-                      }}
-                    />
-                  ) : (
-                    <div />
-                  )}
-                  {showAts ? (
-                    <AtsReportPanel
-                      applicationId={app.id}
-                      report={app.atsReport!}
-                    />
-                  ) : isAi && completed ? (
-                    <PaperPanel className="border-guava-green/20 p-6">
-                      <h2 className="text-base font-semibold tracking-tight">
-                        Fit report
-                      </h2>
-                      <p className="mt-2 text-sm text-muted-foreground">
-                        No ATS report attached. Regenerate to produce a fresh
-                        fit assessment.
+              {/* Desk: primary + sticky rail */}
+              <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_17.5rem]">
+                <div className="min-w-0 space-y-4">
+                  <DeskTabs
+                    tab={tab}
+                    onChange={setTab}
+                    showLetter={showLetter}
+                    showFit={showAts}
+                    showCv={showCv}
+                  />
+
+                  <div role="tabpanel">
+                    {tab === "overview" ? (
+                      <OverviewMaterials
+                        app={app}
+                        showLetter={showLetter}
+                        showAts={showAts}
+                        showCv={showCv}
+                        savePending={saveMutation.isPending}
+                        saveError={saveError}
+                        cvChoiceBusy={cvChoiceBusy}
+                        onSaveLetter={async (next) => {
+                          await saveMutation.mutateAsync(next);
+                        }}
+                        onCvChoiceChange={(c) => void handleCvChoiceChange(c)}
+                      />
+                    ) : null}
+
+                    {tab === "letter" && showLetter ? (
+                      <CoverLetterEditor
+                        content={app.coverLetterContent ?? ""}
+                        edited={app.coverLetterEdited}
+                        saving={saveMutation.isPending}
+                        saveError={saveError}
+                        onSave={async (next) => {
+                          await saveMutation.mutateAsync(next);
+                        }}
+                      />
+                    ) : null}
+
+                    {tab === "fit" && showAts ? (
+                      app.atsReport ? (
+                        <AtsReportPanel
+                applicationId={app.id}
+                report={app.atsReport}
+              />
+                      ) : (
+                        <PaperPanel className="border-guava-green/20 p-6">
+                          <h2 className="text-base font-semibold tracking-tight">
+                            Fit report
+                          </h2>
+                          <p className="mt-2 text-sm text-muted-foreground">
+                            No ATS report attached. Regenerate to produce a
+                            fresh fit assessment.
+                          </p>
+                        </PaperPanel>
+                      )
+                    ) : null}
+
+                    {tab === "cv" && showCv ? (
+                      <GeneratedCvPanel
+                        app={app}
+                        compactEmpty
+                        cvChoice={app.cvChoice ?? "UPLOADED"}
+                        onCvChoiceChange={(c) => void handleCvChoiceChange(c)}
+                        choiceBusy={cvChoiceBusy}
+                      />
+                    ) : null}
+
+                    {tab === "track" ? (
+                      <StatusAndEvents
+                        key={`${app.id}-${app.status}-${app.updatedAt}`}
+                        app={app}
+                      />
+                    ) : null}
+                  </div>
+                </div>
+
+                {/* Sticky rail */}
+                <aside className="space-y-4 lg:sticky lg:top-6">
+                  {showCv ? (
+                    <PaperPanel className="border-guava-green/15 p-4">
+                      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        CV for apply
                       </p>
+                      <CvChoiceToggle
+                        cvChoice={app.cvChoice ?? "UPLOADED"}
+                        hasGenerated={hasGenerated}
+                        busy={cvChoiceBusy}
+                        onCvChoiceChange={(c) => void handleCvChoiceChange(c)}
+                      />
                     </PaperPanel>
                   ) : null}
-                </div>
-              )}
 
-              {showCv ? (
-                <GeneratedCvPanel
-                  app={app}
-                  cvChoice={app.cvChoice ?? "UPLOADED"}
-                  onCvChoiceChange={(choice) => void handleCvChoiceChange(choice)}
-                  busy={cvChoiceBusy}
-                />
-              ) : null}
+                  <ApplyPanel app={app} />
 
-              <ApplyPanel app={app} />
-              <StatusAndEvents key={`${app.id}-${app.status}-${app.updatedAt}`} app={app} />
+                  {canRegen ? (
+                    <button
+                      type="button"
+                      onClick={() => setRegenOpen(true)}
+                      disabled={regenMutation.isPending}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-guava-green/25 bg-white/80 px-4 py-2.5 text-sm font-medium transition-colors hover:border-guava-green/45 active:scale-[0.98]"
+                    >
+                      <ArrowClockwise className="size-4" weight="bold" />
+                      Regenerate
+                    </button>
+                  ) : null}
+
+                  {!hasGenerated && (isAi || isManual) ? (
+                    <div>
+                      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        Optional
+                      </p>
+                      <GenerateTailoredCvButton app={app} />
+                    </div>
+                  ) : null}
+                </aside>
+              </div>
             </>
           ) : null}
         </>
@@ -499,6 +760,7 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
       <RegenerateConfirm
         open={regenOpen}
         busy={regenMutation.isPending}
+        includeCv={autoGenerateCv || hasGenerated}
         onCancel={() => setRegenOpen(false)}
         onConfirm={() => regenMutation.mutate()}
       />

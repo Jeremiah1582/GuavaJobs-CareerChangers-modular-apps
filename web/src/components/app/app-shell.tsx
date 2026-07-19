@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   Briefcase,
   ClipboardText,
+  GearSix,
   UserCircle,
 } from "@phosphor-icons/react";
 import { BrandMark } from "@/components/marketing/brand-mark";
@@ -20,6 +21,7 @@ const links = [
   { href: "/app/jobs", label: "Jobs", icon: Briefcase },
   { href: "/app/applications", label: "Applications", icon: ClipboardText },
   { href: "/app/profile", label: "Profile", icon: UserCircle },
+  { href: "/app/settings", label: "Settings", icon: GearSix },
 ] as const;
 
 function isActive(pathname: string, href: string): boolean {
@@ -69,7 +71,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           className="fixed inset-x-0 bottom-0 z-40 border-t border-guava-green/10 bg-white/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-md sm:hidden"
           aria-label="Primary"
         >
-          <ul className="mx-auto grid max-w-lg grid-cols-3">
+          <ul className="mx-auto grid max-w-lg grid-cols-4">
             {links.map(({ href, label, icon: Icon }) => {
               const active = isActive(pathname, href);
               return (

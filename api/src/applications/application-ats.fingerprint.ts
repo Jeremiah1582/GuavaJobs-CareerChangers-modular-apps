@@ -44,6 +44,23 @@ export function resolveJobDescriptionForAts(app: {
   return fromSnap;
 }
 
+/** Latest uploaded CV text for tailored CV generation (prefers live profile CV). */
+export function resolveCvTextForGeneration(app: {
+  cvSnapshot: unknown;
+  profile?: { currentCv?: { parsedText: string | null } | null } | null;
+}): string {
+  const fromProfile = app.profile?.currentCv?.parsedText?.trim() ?? '';
+  if (fromProfile) return fromProfile;
+
+  const snap =
+    app.cvSnapshot &&
+    typeof app.cvSnapshot === 'object' &&
+    !Array.isArray(app.cvSnapshot)
+      ? (app.cvSnapshot as Record<string, unknown>)
+      : null;
+  return typeof snap?.parsedText === 'string' ? snap.parsedText.trim() : '';
+}
+
 export function resolveCvTextForAts(app: {
   cvChoice: string;
   cvSnapshot: unknown;

@@ -19,7 +19,9 @@ export class UsersController {
   }
 
   @Patch()
-  @ApiOperation({ summary: 'Update account-level fields' })
+  @ApiOperation({
+    summary: 'Update account-level fields and/or preferences (merged into metadata)',
+  })
   patchMe(
     @CurrentUser() user: AuthenticatedUser,
     @Body(new ZodValidationPipe(patchMeSchema)) body: PatchMeInput,

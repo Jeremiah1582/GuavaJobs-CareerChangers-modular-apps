@@ -69,6 +69,11 @@ export async function apiFetch<T>(
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   }
+  // Authenticated app data must not use conditional/304 caching via the
+  // Next rewrite proxy (empty 304 bodies break JSON parsing / polling).
+  if (!headers.has("Cache-Control")) {
+    headers.set("Cache-Control", "no-cache");
+  }
 
   let res: Response;
   try {
@@ -76,12 +81,20 @@ export async function apiFetch<T>(
       ...rest,
       headers,
       body,
+      cache: rest.cache ?? "no-store",
     });
   } catch (err) {
     const reason = err instanceof Error ? err.message : "Network error";
     throw new ApiError(
       `Could not reach API (${reason}). Check NEXT_PUBLIC_API_URL / API_UPSTREAM and that Coolify is up.`,
       { status: 0, code: "NETWORK_ERROR" },
+    );
+  }
+
+  if (res.status === 304) {
+    throw new ApiError(
+      "Stale cached API response (304). Retrying without cache.",
+      { status: 304, code: "CACHE_STALE" },
     );
   }
 
@@ -119,6 +132,9 @@ export async function apiFetchBlob(
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   }
+  if (!headers.has("Cache-Control")) {
+    headers.set("Cache-Control", "no-cache");
+  }
 
   let res: Response;
   try {
@@ -126,6 +142,7 @@ export async function apiFetchBlob(
       ...rest,
       headers,
       body,
+      cache: rest.cache ?? "no-store",
     });
   } catch (err) {
     const reason = err instanceof Error ? err.message : "Network error";

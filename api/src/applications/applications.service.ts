@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { StorageService } from '../cv/storage.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppError } from '../shared/schemas/error.schema';
 import {
@@ -14,7 +15,12 @@ import {
 
 @Injectable()
 export class ApplicationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(ApplicationsService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storage: StorageService,
+  ) {}
 
   async list(userId: string, query: ListApplicationsQuery) {
     const where: Prisma.ApplicationWhereInput = {
@@ -52,7 +58,12 @@ export class ApplicationsService {
   }
 
   async patch(userId: string, applicationId: string, input: PatchApplicationInput) {
-    await this.assertOwned(userId, applicationId);
+    const current = await this.prisma.application.findFirst({
+      where: { id: applicationId, userId },
+    });
+    if (!current) {
+      throw new AppError('APPLICATION_NOT_FOUND', 'Application not found', 404);
+    }
 
     const {
       generatedCvContent,
@@ -61,6 +72,7 @@ export class ApplicationsService {
       appliedAt,
       coverLetterContent,
       coverLetterEdited,
+      pastedJobDescription,
       ...rest
     } = input;
 
@@ -84,6 +96,23 @@ export class ApplicationsService {
     if (coverLetterContent !== undefined) {
       data.coverLetterContent = coverLetterContent;
       data.coverLetterEdited = coverLetterEdited ?? true;
+    }
+
+    if (pastedJobDescription !== undefined) {
+      data.pastedJobDescription = pastedJobDescription;
+      // Keep UI "full JD" and regenerate aligned: merge into snapshot.description.
+      if (typeof pastedJobDescription === 'string' && pastedJobDescription.trim()) {
+        const existing =
+          current.jobSnapshot &&
+          typeof current.jobSnapshot === 'object' &&
+          !Array.isArray(current.jobSnapshot)
+            ? { ...(current.jobSnapshot as Record<string, unknown>) }
+            : {};
+        data.jobSnapshot = {
+          ...existing,
+          description: pastedJobDescription.trim(),
+        } as Prisma.InputJsonValue;
+      }
     }
 
     if (generatedCvContent) {
@@ -141,12 +170,36 @@ export class ApplicationsService {
     return response.generatedCvExport;
   }
 
-  private async assertOwned(userId: string, applicationId: string) {
+  /**
+   * Hard-delete an owned application. Cascades ATS report, GeneratedCv, and
+   * events via Prisma; also removes the application-scoped CV copy in storage.
+   * Profile and master CV are never deleted.
+   */
+  async remove(userId: string, applicationId: string) {
     const app = await this.prisma.application.findFirst({
       where: { id: applicationId, userId },
+      select: { id: true, cvStorageKey: true },
     });
     if (!app) {
       throw new AppError('APPLICATION_NOT_FOUND', 'Application not found', 404);
     }
+
+    const cvStorageKey = app.cvStorageKey;
+
+    await this.prisma.application.delete({ where: { id: applicationId } });
+
+    if (cvStorageKey) {
+      try {
+        await this.storage.removeObject(cvStorageKey);
+      } catch (err) {
+        this.logger.warn(
+          `Failed to remove CV storage object for application ${applicationId}: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      }
+    }
+
+    return { deleted: true };
   }
 }

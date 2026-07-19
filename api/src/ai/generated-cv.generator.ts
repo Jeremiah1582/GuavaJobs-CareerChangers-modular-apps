@@ -6,6 +6,7 @@ import {
   stripIdentityFromStoredContent,
 } from '../shared/schemas/generated-cv.schema';
 import { LlmClient } from './llm.client';
+import { HUMAN_VOICE_PROMPT } from './prompt-human-voice';
 
 export type GeneratedCvLlmOutput = {
   content: StoredGeneratedCvContent;
@@ -21,6 +22,13 @@ HARD HONESTY RULES (non-negotiable):
 - If the source lacks evidence for a section, omit that section or leave it empty — do not pad with fabrication.
 - Prefer omitting a keyword over inventing it to match the JD.
 
+COMPREHENSIVE COVERAGE (without fabricating):
+- Preserve every evidenced role, education entry, certification, and project from the source CV.
+- Fill every schema section that has source evidence (summary, coreCompetencies, work, education, skills, certificates, projects, languages, awards, volunteer).
+- For recent roles, aim for 3–6 highlights when the source supports that many distinct facts; do not invent bullets to hit a count.
+- Keep chronological order of work and education as in the source (newest first unless source clearly differs).
+- Skills and coreCompetencies must be grounded in the source; reorder/emphasize for the JD but do not invent.
+
 JD / COMPANY RELEVANCE (without fabricating):
 - Reorder and emphasize real experience that best matches the job description.
 - Rewrite/rephrase existing highlights toward JD language when the underlying fact is true.
@@ -31,6 +39,9 @@ JD / COMPANY RELEVANCE (without fabricating):
 
 GDPR / anonymity:
 - Never include personal identity: no name, email, phone, address, LinkedIn/GitHub URLs, or a "basics" object.
+
+${HUMAN_VOICE_PROMPT}
+- On CV bullets: concrete verbs, no identical openers across consecutive highlights, no filler.
 
 Return JSON: { "content": { ...career body... } } where content matches:
 {
@@ -54,6 +65,7 @@ Formatting:
 - endDate null means current/Present — use JSON null, not the string "Present".
 - Prefer standard sections: Summary, Experience (work), Education, Skills.
 - Omit sections with no source evidence.`;
+
 @Injectable()
 export class GeneratedCvGenerator {
   constructor(private readonly llm: LlmClient) {}
@@ -76,12 +88,15 @@ export class GeneratedCvGenerator {
           'Use ONLY facts from cvText and profile — never invent employers, titles, dates, degrees, certifications, metrics, tools, or responsibilities',
           'Never add skills/keywords not supported by the source CV/profile',
           'Career-change / transferable-skill wording only when grounded in real experience',
+          'Preserve every evidenced role/education/cert/project; fill evidenced schema sections',
+          '3–6 bullets per recent role when source supports; keep chronology',
           'Reorder and rephrase real experience toward JD language; do not fabricate fit',
           'Prefer Action + Context + Result only when metrics exist in the source CV',
           'Front-load JD-aligned keywords that are already evidenced in the source',
           'Frame summary for the target role/company without inventing history at that company',
           'Never include name, email, phone, address, or profile URLs',
           'Omit sections with no source evidence',
+          'Human voice: vary rhythm, concrete verbs, no identical bullet openers',
         ],
       },
       null,

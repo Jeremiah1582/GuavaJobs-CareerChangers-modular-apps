@@ -18,7 +18,7 @@ export default async function ApplicationDraftPage({
     <AppPageShell
       wide
       title="Application"
-      description="Review materials, apply on the employer site, then track what happens next."
+      description="Review materials, apply externally, then track what happens next."
     >
       <DraftReview applicationId={id} />
     </AppPageShell>

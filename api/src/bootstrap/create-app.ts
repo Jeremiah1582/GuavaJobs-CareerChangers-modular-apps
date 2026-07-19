@@ -36,7 +36,11 @@ function isAllowedWebOrigin(
       /^192\.168\.\d{1,3}\.\d{1,3}$/.test(url.hostname) ||
       /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(url.hostname) ||
       /^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$/.test(url.hostname);
-    const localPort = url.port === '3000' || url.port === '3001';
+    const localPort =
+      url.port === '3000' ||
+      url.port === '3001' ||
+      url.port === '3002' ||
+      url.port === '';
     return localHost && localPort;
   } catch {
     return false;
@@ -48,6 +52,25 @@ export async function createNestApp(): Promise<INestApplication> {
   const config = app.get(ConfigService<EnvConfig, true>);
   const webOrigin = config.get('WEB_ORIGIN', { infer: true });
   const logger = new Logger('CORS');
+
+  // Disable Express ETags so GET /applications/:id never returns empty 304s
+  // through the Next.js rewrite proxy (breaks JSON clients / CV polling).
+  const http = app.getHttpAdapter().getInstance() as {
+    set?: (key: string, value: unknown) => void;
+    use?: (
+      handler: (
+        req: unknown,
+        res: { setHeader: (k: string, v: string) => void },
+        next: () => void,
+      ) => void,
+    ) => void;
+  };
+  http.set?.('etag', false);
+  http.use?.((_req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    next();
+  });
 
   app.enableCors({
     origin: (origin, callback) => {

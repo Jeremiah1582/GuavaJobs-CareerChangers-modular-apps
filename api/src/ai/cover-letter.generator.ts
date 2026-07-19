@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { Injectable } from '@nestjs/common';
 import { LlmClient } from './llm.client';
+import { HUMAN_VOICE_PROMPT } from './prompt-human-voice';
 
 export const coverLetterLlmOutputSchema = z.object({
   coverLetter: z.string().min(50).max(8000),
@@ -12,6 +13,9 @@ const SYSTEM_PROMPT = `You write honest, tailored cover letters for job applicat
 Use ONLY facts from the candidate profile, job description, and CV text provided.
 Never invent employers, dates, degrees, or skills.
 Career-change framing is allowed when supported by the CV.
+
+${HUMAN_VOICE_PROMPT}
+
 Return JSON: { "coverLetter": "plain text letter" }`;
 
 @Injectable()
@@ -24,7 +28,7 @@ export class CoverLetterGenerator {
     jobDescription: string;
     profileSummary: Record<string, unknown>;
     cvText: string;
-  }): Promise<CoverLetterLlmOutput>{
+  }): Promise<CoverLetterLlmOutput> {
     const userPrompt = JSON.stringify(
       {
         jobTitle: params.jobTitle,
@@ -36,6 +40,7 @@ export class CoverLetterGenerator {
           'Plain text only, 3-4 paragraphs',
           'No placeholders like [Company Name]',
           'Do not fabricate experience',
+          'Sound human: vary rhythm, concrete language, light contractions OK',
         ],
       },
       null,
