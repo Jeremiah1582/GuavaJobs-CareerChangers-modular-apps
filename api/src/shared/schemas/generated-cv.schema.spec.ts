@@ -82,4 +82,66 @@ describe('storedGeneratedCvContentSchema', () => {
     expect(hydrated.basics.email).toBe('jane@example.com');
     expect(hydrated.label).toBe('Software Engineer');
   });
+
+  it('normalizes messy LLM dates on education, certificates, and projects', () => {
+    const parsed = storedGeneratedCvContentSchema.parse({
+      ...validBase,
+      education: [
+        {
+          institution: 'Uni A',
+          area: 'CS',
+          studyType: 'BSc',
+          startDate: '2018',
+          endDate: '2021',
+        },
+        {
+          institution: 'Uni B',
+          startDate: 'Jan 2022',
+          endDate: 'Present',
+        },
+      ],
+      certificates: [
+        { name: 'AWS SAA', issuer: 'Amazon', date: '2023' },
+        { name: 'CKA', date: 'June 2024' },
+      ],
+      projects: [
+        {
+          name: 'Portfolio',
+          description: 'Personal site',
+          startDate: '2020',
+          endDate: '',
+          url: '',
+        },
+      ],
+      work: [
+        {
+          name: 'Acme',
+          position: 'Engineer',
+          startDate: '2020-1',
+          endDate: 'current',
+          highlights: ['Built APIs'],
+        },
+      ],
+    });
+
+    expect(parsed.education[0]).toMatchObject({
+      startDate: '2018-01',
+      endDate: '2021-01',
+    });
+    expect(parsed.education[1]).toMatchObject({
+      startDate: '2022-01',
+      endDate: null,
+    });
+    expect(parsed.certificates[0].date).toBe('2023-01');
+    expect(parsed.certificates[1].date).toBe('2024-06');
+    expect(parsed.projects[0]).toMatchObject({
+      startDate: '2020-01',
+      endDate: null,
+      url: null,
+    });
+    expect(parsed.work[0]).toMatchObject({
+      startDate: '2020-01',
+      endDate: null,
+    });
+  });
 });

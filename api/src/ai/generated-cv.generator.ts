@@ -49,10 +49,11 @@ Return JSON: { "content": { ...career body... } } where content matches:
 }
 
 Formatting:
-- Dates as YYYY-MM (or YYYY-MM-DD); endDate null means current/Present.
+- Dates MUST be YYYY-MM or YYYY-MM-DD (never year-only like "2020", never "Jan 2020", never "Present" as a string).
+- If the source only has a year, expand to YYYY-01 (e.g. "2018" → "2018-01").
+- endDate null means current/Present — use JSON null, not the string "Present".
 - Prefer standard sections: Summary, Experience (work), Education, Skills.
 - Omit sections with no source evidence.`;
-
 @Injectable()
 export class GeneratedCvGenerator {
   constructor(private readonly llm: LlmClient) {}

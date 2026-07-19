@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { normalizeResumeDate } from '../utils/resume-date';
 
 /** Identity keys must never appear in stored GeneratedCv.content (GDPR split). */
 export const FORBIDDEN_STORED_IDENTITY_KEYS = [
@@ -21,16 +22,32 @@ export const FORBIDDEN_STORED_IDENTITY_KEYS = [
   'imgUrl',
 ] as const;
 
-const dateYmOrYmd = z
+const dateStringSchema = z
   .string()
   .regex(/^\d{4}-\d{2}(-\d{2})?$/, 'Expected YYYY-MM or YYYY-MM-DD');
+
+/** Required career date — accepts year-only, Present→fail, ISO, month names, etc. */
+const dateYmOrYmd = z.preprocess(normalizeResumeDate, dateStringSchema);
+
+/** Optional/nullable career date — empty/Present → null. */
+const dateYmOrYmdNullable = z.preprocess(
+  normalizeResumeDate,
+  dateStringSchema.nullable().optional(),
+);
+
+const optionalUrl = z.preprocess((val) => {
+  if (val === undefined) return undefined;
+  if (val === null) return null;
+  if (typeof val === 'string' && !val.trim()) return null;
+  return val;
+}, z.string().url().nullable().optional());
 
 const workItemSchema = z.object({
   name: z.string().min(1).max(200),
   position: z.string().min(1).max(200),
   location: z.string().max(200).nullable().optional(),
   startDate: dateYmOrYmd,
-  endDate: dateYmOrYmd.nullable(),
+  endDate: z.preprocess(normalizeResumeDate, dateStringSchema.nullable()),
   highlights: z.array(z.string().min(1).max(500)).max(12).default([]),
 });
 
@@ -38,8 +55,8 @@ const educationItemSchema = z.object({
   institution: z.string().min(1).max(200),
   area: z.string().max(200).nullable().optional(),
   studyType: z.string().max(200).nullable().optional(),
-  startDate: dateYmOrYmd.nullable().optional(),
-  endDate: dateYmOrYmd.nullable().optional(),
+  startDate: dateYmOrYmdNullable,
+  endDate: dateYmOrYmdNullable,
 });
 
 const skillItemSchema = z.object({
@@ -50,17 +67,17 @@ const skillItemSchema = z.object({
 const certificateItemSchema = z.object({
   name: z.string().min(1).max(200),
   issuer: z.string().max(200).nullable().optional(),
-  date: dateYmOrYmd.nullable().optional(),
-  expiryDate: dateYmOrYmd.nullable().optional(),
+  date: dateYmOrYmdNullable,
+  expiryDate: dateYmOrYmdNullable,
 });
 
 const projectItemSchema = z.object({
   name: z.string().min(1).max(200),
   description: z.string().max(2000).nullable().optional(),
   highlights: z.array(z.string().min(1).max(500)).max(10).optional(),
-  startDate: dateYmOrYmd.nullable().optional(),
-  endDate: dateYmOrYmd.nullable().optional(),
-  url: z.string().url().nullable().optional(),
+  startDate: dateYmOrYmdNullable,
+  endDate: dateYmOrYmdNullable,
+  url: optionalUrl,
 });
 
 const languageItemSchema = z.object({
@@ -70,7 +87,7 @@ const languageItemSchema = z.object({
 
 const awardItemSchema = z.object({
   title: z.string().min(1).max(200),
-  date: dateYmOrYmd.nullable().optional(),
+  date: dateYmOrYmdNullable,
   awarder: z.string().max(200).nullable().optional(),
   summary: z.string().max(1000).nullable().optional(),
 });
@@ -78,12 +95,11 @@ const awardItemSchema = z.object({
 const volunteerItemSchema = z.object({
   organization: z.string().min(1).max(200),
   position: z.string().max(200).nullable().optional(),
-  startDate: dateYmOrYmd.nullable().optional(),
-  endDate: dateYmOrYmd.nullable().optional(),
+  startDate: dateYmOrYmdNullable,
+  endDate: dateYmOrYmdNullable,
   summary: z.string().max(1000).nullable().optional(),
   highlights: z.array(z.string().min(1).max(500)).max(10).optional(),
 });
-
 const generatedCvMetaSchema = z.object({
   schemaVersion: z.string().min(1).max(32).default('json-ats-v1'),
   /** Human-readable target, e.g. "Software Engineer @ Acme". */

@@ -23,6 +23,8 @@ export const envSchema = z
     OPENAI_MODEL: z.string().default('gpt-4o-mini'),
     OPENROUTER_API_KEY: z.string().optional(),
     OPENROUTER_MODEL: z.string().optional(),
+    /** Comma-separated OpenRouter fallback models after the primary (429 / outage). */
+    OPENROUTER_FALLBACK_MODELS: z.string().optional(),
     ADZUNA_APP_ID: z.string().optional(),
     ADZUNA_APP_KEY: z.string().optional(),
     ADZUNA_API_KEY: z.string().optional(),
@@ -110,6 +112,41 @@ export function getLlmModel(env: EnvConfig): string {
     return env.OPENAI_MODEL;
   }
   return env.OPENROUTER_MODEL ?? 'deepseek/deepseek-chat';
+}
+
+/** Default cheap/reliable OpenRouter backups when the primary is rate-limited. */
+const DEFAULT_OPENROUTER_FALLBACKS = [
+  'openai/gpt-4o-mini',
+  'google/gemini-2.0-flash-001',
+] as const;
+
+/**
+ * Priority-ordered model list for OpenRouter `models` fallbacks.
+ * Primary first; duplicates removed. Empty when not using OpenRouter.
+ */
+export function getLlmModelCandidates(env: EnvConfig): string[] {
+  const apiKey = getLlmApiKey(env);
+  const primary = getLlmModel(env);
+  if (!apiKey || !isOpenRouterKey(apiKey)) {
+    return [primary];
+  }
+
+  const fromEnv = (env.OPENROUTER_FALLBACK_MODELS ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const fallbacks =
+    fromEnv.length > 0 ? fromEnv : [...DEFAULT_OPENROUTER_FALLBACKS];
+
+  const seen = new Set<string>();
+  const ordered: string[] = [];
+  for (const id of [primary, ...fallbacks]) {
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    ordered.push(id);
+  }
+  return ordered;
 }
 
 export function getAdzunaAppKey(env: EnvConfig): string {
