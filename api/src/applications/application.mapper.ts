@@ -26,26 +26,40 @@ export function toApplicationResponse(
   app: ApplicationWithRelations,
   includeEvents = false,
 ): ApplicationResponse {
-  const storedContent = app.generatedCv
-    ? parseStoredCvContent(app.generatedCv.content)
-    : null;
+  // Never let a bad GeneratedCv JSON take down list/detail — fall back to null.
+  let storedContent: GeneratedCvStoredContent | null = null;
+  if (app.generatedCv) {
+    try {
+      storedContent = parseStoredCvContent(app.generatedCv.content);
+    } catch {
+      storedContent = null;
+    }
+  }
 
-  const generatedCv = app.generatedCv
-    ? {
-        id: app.generatedCv.id,
-        content: storedContent!,
-        edited: app.generatedCv.edited,
-        templateId: app.generatedCv.templateId,
-        sourceCvDocumentId: app.generatedCv.sourceCvDocumentId,
-        createdAt: app.generatedCv.createdAt.toISOString(),
-        updatedAt: app.generatedCv.updatedAt.toISOString(),
-      }
-    : null;
-
-  const generatedCvExport =
-    storedContent && app.user && app.profile
-      ? hydrateGeneratedCvContent(storedContent, buildBasics(app.user, app.profile, storedContent))
+  const generatedCv =
+    app.generatedCv && storedContent
+      ? {
+          id: app.generatedCv.id,
+          content: storedContent,
+          edited: app.generatedCv.edited,
+          templateId: app.generatedCv.templateId,
+          sourceCvDocumentId: app.generatedCv.sourceCvDocumentId,
+          createdAt: app.generatedCv.createdAt.toISOString(),
+          updatedAt: app.generatedCv.updatedAt.toISOString(),
+        }
       : null;
+
+  let generatedCvExport: ApplicationResponse['generatedCvExport'] = null;
+  if (storedContent && app.user && app.profile) {
+    try {
+      generatedCvExport = hydrateGeneratedCvContent(
+        storedContent,
+        buildBasics(app.user, app.profile, storedContent),
+      );
+    } catch {
+      generatedCvExport = null;
+    }
+  }
 
   return {
     id: app.id,
