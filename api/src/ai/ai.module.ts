@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AtsReportGenerator } from './ats-report.generator';
 import { CoverLetterGenerator } from './cover-letter.generator';
+import { GeneratedCvGenerator } from './generated-cv.generator';
 import { JobFactsParser } from './job-facts.parser';
 import { LlmClient } from './llm.client';
 import { ProfileAtsGenerator } from './profile-ats.generator';
@@ -10,6 +11,7 @@ import { ProfileAtsGenerator } from './profile-ats.generator';
     LlmClient,
     ProfileAtsGenerator,
     CoverLetterGenerator,
+    GeneratedCvGenerator,
     AtsReportGenerator,
     JobFactsParser,
   ],
@@ -17,6 +19,7 @@ import { ProfileAtsGenerator } from './profile-ats.generator';
     LlmClient,
     ProfileAtsGenerator,
     CoverLetterGenerator,
+    GeneratedCvGenerator,
     AtsReportGenerator,
     JobFactsParser,
   ],

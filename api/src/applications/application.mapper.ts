@@ -3,18 +3,50 @@ import {
   ApplicationAtsReport,
   ApplicationEvent,
   ApplicationGenerationStatus,
+  GeneratedCv,
+  Profile,
+  User,
 } from '@prisma/client';
 import { ApplicationResponse } from '../shared/schemas/application.schema';
+import {
+  GeneratedCvStoredContent,
+  generatedCvStoredContentSchema,
+  hydrateGeneratedCvContent,
+} from '../shared/schemas/generated-cv.schema';
 
 type ApplicationWithRelations = Application & {
   atsReport?: ApplicationAtsReport | null;
   events?: ApplicationEvent[];
+  generatedCv?: GeneratedCv | null;
+  user?: User | null;
+  profile?: Profile | null;
 };
 
 export function toApplicationResponse(
   app: ApplicationWithRelations,
   includeEvents = false,
 ): ApplicationResponse {
+  const storedContent = app.generatedCv
+    ? parseStoredCvContent(app.generatedCv.content)
+    : null;
+
+  const generatedCv = app.generatedCv
+    ? {
+        id: app.generatedCv.id,
+        content: storedContent!,
+        edited: app.generatedCv.edited,
+        templateId: app.generatedCv.templateId,
+        sourceCvDocumentId: app.generatedCv.sourceCvDocumentId,
+        createdAt: app.generatedCv.createdAt.toISOString(),
+        updatedAt: app.generatedCv.updatedAt.toISOString(),
+      }
+    : null;
+
+  const generatedCvExport =
+    storedContent && app.user && app.profile
+      ? hydrateGeneratedCvContent(storedContent, buildBasics(app.user, app.profile, storedContent))
+      : null;
+
   return {
     id: app.id,
     userId: app.userId,
@@ -48,6 +80,9 @@ export function toApplicationResponse(
     coverLetterTemplateId: app.coverLetterTemplateId,
     coverLetterSource: app.coverLetterSource,
     coverLetterEdited: app.coverLetterEdited,
+    cvChoice: app.cvChoice,
+    generatedCv,
+    generatedCvExport,
     appliedAt: app.appliedAt?.toISOString() ?? null,
     atsReport: app.atsReport ? toAtsReportResponse(app.atsReport) : null,
     events: includeEvents
@@ -63,6 +98,62 @@ export function toApplicationResponse(
     createdAt: app.createdAt.toISOString(),
     updatedAt: app.updatedAt.toISOString(),
   };
+}
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function buildBasics(
+  user: Pick<User, 'name' | 'email' | 'linkedinUrl' | 'githubUrl'>,
+  profile: Pick<
+    Profile,
+    'jobTitle' | 'contactPhone' | 'locationCity' | 'locationCountry'
+  >,
+  content: GeneratedCvStoredContent,
+) {
+  const profiles: { network: string; url: string }[] = [];
+  if (user.linkedinUrl && isHttpUrl(user.linkedinUrl)) {
+    profiles.push({ network: 'LinkedIn', url: user.linkedinUrl });
+  }
+  if (user.githubUrl && isHttpUrl(user.githubUrl)) {
+    profiles.push({ network: 'GitHub', url: user.githubUrl });
+  }
+
+  return {
+    name: user.name,
+    email: user.email,
+    phone: profile.contactPhone,
+    label: content.label ?? profile.jobTitle,
+    location: {
+      city: profile.locationCity,
+      country: profile.locationCountry,
+    },
+    profiles,
+  };
+}
+
+function parseStoredCvContent(raw: unknown): GeneratedCvStoredContent {
+  // Tolerate accidental wrapper from older worker builds: { content: { ... } }
+  if (
+    raw &&
+    typeof raw === 'object' &&
+    !Array.isArray(raw) &&
+    'content' in raw &&
+    (raw as { content: unknown }).content &&
+    typeof (raw as { content: unknown }).content === 'object' &&
+    !Array.isArray((raw as { content: unknown }).content)
+  ) {
+    return generatedCvStoredContentSchema.parse(
+      (raw as { content: unknown }).content,
+    );
+  }
+  return generatedCvStoredContentSchema.parse(raw);
 }
 
 function toAtsReportResponse(report: ApplicationAtsReport) {
@@ -108,3 +199,17 @@ export function isTerminalGenerationStatus(
 ): boolean {
   return status === 'COMPLETED' || status === 'FAILED';
 }
+
+export const applicationDetailInclude = {
+  atsReport: true,
+  generatedCv: true,
+  user: true,
+  profile: true,
+} as const;
+
+export const applicationListInclude = {
+  atsReport: true,
+  generatedCv: true,
+  user: true,
+  profile: true,
+} as const;

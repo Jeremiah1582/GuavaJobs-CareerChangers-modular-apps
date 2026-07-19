@@ -27,6 +27,7 @@ import {
   patchApplicationSchema,
   PatchApplicationInput,
   hybridCoverLetterSchema,
+  hybridGenerateCvSchema,
 } from '../shared/schemas/application.schema';
 import { AppError } from '../shared/schemas/error.schema';
 import { ApplicationGenerateService } from './application-generate.service';
@@ -130,6 +131,38 @@ export class ApplicationsController {
   @ApiOperation({ summary: 'Manual hybrid — optional AI ATS report' })
   hybridAts(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
     return this.manualService.generateAtsReport(user.id, id);
+  }
+
+  @Post(':id/generate-cv')
+  @HttpCode(202)
+  @ApiOperation({ summary: 'Manual hybrid — AI tailored CV JSON from pasted JD' })
+  hybridGenerateCv(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(hybridGenerateCvSchema))
+    body: { pastedJobDescription?: string },
+  ) {
+    return this.manualService.generateCv(user.id, id, body.pastedJobDescription);
+  }
+
+  @Get(':id/generated-cv/json')
+  @ApiOperation({ summary: 'Download hydrated generated CV JSON attachment' })
+  async generatedCvJson(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const payload = await this.applications.getHydratedGeneratedCvExport(
+      user.id,
+      id,
+    );
+
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="generated-cv-${id}.json"`,
+    );
+    res.send(JSON.stringify(payload, null, 2));
   }
 
   @Post(':id/cover-letter/pdf')

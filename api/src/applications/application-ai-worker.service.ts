@@ -6,6 +6,7 @@ import {
 } from '@prisma/client';
 import { AtsReportGenerator } from '../ai/ats-report.generator';
 import { CoverLetterGenerator } from '../ai/cover-letter.generator';
+import { GeneratedCvGenerator } from '../ai/generated-cv.generator';
 import { JobFactsParser } from '../ai/job-facts.parser';
 import { JobsService } from '../jobs/jobs.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -22,6 +23,7 @@ export class ApplicationAiWorkerService {
     private readonly jobs: JobsService,
     private readonly snapshots: ApplicationSnapshotService,
     private readonly coverLetterGen: CoverLetterGenerator,
+    private readonly generatedCvGen: GeneratedCvGenerator,
     private readonly atsReportGen: AtsReportGenerator,
     private readonly jobFacts: JobFactsParser,
     private readonly usage: UsageService,
@@ -46,6 +48,9 @@ export class ApplicationAiWorkerService {
           break;
         case 'hybrid-ats-report':
           await this.runHybridAtsReport(job);
+          break;
+        case 'hybrid-generate-cv':
+          await this.runHybridGenerateCv(job);
           break;
       }
     } catch (error) {
@@ -85,13 +90,27 @@ export class ApplicationAiWorkerService {
 
     const facts = this.jobFacts.parseFromJob(jobData);
     const cvText = String(bundle.cvSnapshot.parsedText ?? '');
-    const coverLetter = await this.coverLetterGen.generate({
-      jobTitle: jobData.title,
-      companyName: jobData.company,
-      jobDescription: jobData.description,
-      profileSummary: bundle.profileSnapshot,
-      cvText,
-    });
+    const sourceCvDocumentId =
+      typeof bundle.cvSnapshot.cvDocumentId === 'string'
+        ? bundle.cvSnapshot.cvDocumentId
+        : null;
+
+    const [coverLetter, generatedCv] = await Promise.all([
+      this.coverLetterGen.generate({
+        jobTitle: jobData.title,
+        companyName: jobData.company,
+        jobDescription: jobData.description,
+        profileSummary: bundle.profileSnapshot,
+        cvText,
+      }),
+      this.generatedCvGen.generate({
+        jobTitle: jobData.title,
+        companyName: jobData.company,
+        jobDescription: jobData.description,
+        profileSummary: bundle.profileSnapshot,
+        cvText,
+      }),
+    ]);
 
     const ats = await this.atsReportGen.generate({
       jobTitle: jobData.title,
@@ -114,9 +133,28 @@ export class ApplicationAiWorkerService {
           coverLetterContent: coverLetter.coverLetter,
           coverLetterSource: 'AI',
           coverLetterEdited: false,
+          cvChoice: 'GENERATED',
           generationStatus: ApplicationGenerationStatus.COMPLETED,
           generationError: null,
           ...facts,
+        },
+      });
+
+      await tx.generatedCv.upsert({
+        where: { applicationId: app.id },
+        create: {
+          userId: job.userId,
+          applicationId: app.id,
+          profileId: app.profileId,
+          sourceCvDocumentId,
+          content: generatedCv.content as Prisma.InputJsonValue,
+          edited: false,
+          templateId: 'json-ats-v1',
+        },
+        update: {
+          sourceCvDocumentId,
+          content: generatedCv.content as Prisma.InputJsonValue,
+          edited: false,
         },
       });
 
@@ -329,6 +367,73 @@ export class ApplicationAiWorkerService {
       await tx.application.update({
         where: { id: app.id },
         data: {
+          generationStatus: ApplicationGenerationStatus.COMPLETED,
+          generationError: null,
+        },
+      });
+    });
+
+    await this.usage.incrementAiUsage(job.userId);
+  }
+
+  private async runHybridGenerateCv(job: AiGenerationJobData): Promise<void> {
+    const app = await this.prisma.application.findFirstOrThrow({
+      where: { id: job.applicationId, userId: job.userId },
+      include: { profile: { include: { currentCv: true } } },
+    });
+
+    if (app.generationMode !== ApplicationGenerationMode.MANUAL) {
+      throw new Error('Hybrid generated CV requires MANUAL application');
+    }
+
+    const jd =
+      app.pastedJobDescription?.trim() ||
+      String(jsonField(app.jobSnapshot, 'description') ?? '');
+
+    if (!jd) {
+      throw new Error('pastedJobDescription is required');
+    }
+
+    const cvText = app.profile.currentCv?.parsedText ?? '';
+    if (!cvText) {
+      throw new Error('Profile CV with parsed text is required');
+    }
+
+    const generatedCv = await this.generatedCvGen.generate({
+      jobTitle: app.jobRoleTitle ?? 'Role',
+      companyName: app.companyName ?? 'Company',
+      jobDescription: jd,
+      profileSummary: {
+        jobTitle: app.profile.jobTitle,
+        summary: app.profile.summary,
+        skills: app.profile.skills,
+      },
+      cvText,
+    });
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.generatedCv.upsert({
+        where: { applicationId: app.id },
+        create: {
+          userId: job.userId,
+          applicationId: app.id,
+          profileId: app.profileId,
+          sourceCvDocumentId: app.profile.currentCv?.id ?? null,
+          content: generatedCv.content as Prisma.InputJsonValue,
+          edited: false,
+          templateId: 'json-ats-v1',
+        },
+        update: {
+          sourceCvDocumentId: app.profile.currentCv?.id ?? null,
+          content: generatedCv.content as Prisma.InputJsonValue,
+          edited: false,
+        },
+      });
+
+      await tx.application.update({
+        where: { id: app.id },
+        data: {
+          cvChoice: 'GENERATED',
           generationStatus: ApplicationGenerationStatus.COMPLETED,
           generationError: null,
         },

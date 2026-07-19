@@ -7,6 +7,7 @@ export * from './schemas/job.schema';
 export * from './schemas/application.schema';
 export * from './schemas/application-event.schema';
 export * from './schemas/autofill.schema';
+export * from './schemas/generated-cv.schema';
 export * from './schemas/error.schema';
 
 export { FREE_AI_GENERATIONS_PER_MONTH } from './constants/freemium.constants';

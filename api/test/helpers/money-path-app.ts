@@ -23,10 +23,12 @@ export type MoneyPathApp = {
 /**
  * Force local Redis for money-path e2e.
  * Developer `.env` may point at Coolify Redis hostnames that do not resolve locally.
+ * Use DB index 15 + a BullMQ prefix so a local `nest start --watch` cannot steal e2e jobs.
  */
 function ensureE2eRedisUrl(): void {
-  const forced = process.env.E2E_REDIS_URL ?? 'redis://127.0.0.1:6379';
+  const forced = process.env.E2E_REDIS_URL ?? 'redis://127.0.0.1:6379/15';
   process.env.REDIS_URL = forced;
+  process.env.BULLMQ_PREFIX = process.env.BULLMQ_PREFIX || 'bull-e2e';
 }
 
 /**
@@ -209,8 +211,13 @@ export async function pollGeneration(
   while (Date.now() - started < timeoutMs) {
     const res = await request(app.getHttpServer())
       .get(`/api/v1/applications/${applicationId}`)
-      .set('Authorization', token)
-      .expect(200);
+      .set('Authorization', token);
+
+    if (res.status !== 200) {
+      throw new Error(
+        `GET application returned ${res.status}: ${JSON.stringify(res.body)}`,
+      );
+    }
 
     last = res.body as Record<string, unknown>;
     const status = last.generationStatus;

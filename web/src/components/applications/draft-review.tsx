@@ -19,6 +19,7 @@ import { ApplyPanel } from "@/components/applications/apply-panel";
 import { AtsReportPanel } from "@/components/applications/ats-report-panel";
 import { CoverLetterEditor } from "@/components/applications/cover-letter-editor";
 import { GenerateCta } from "@/components/applications/generate-cta";
+import { GeneratedCvPanel } from "@/components/applications/generated-cv-panel";
 import { HybridAiPanel } from "@/components/applications/hybrid-ai-panel";
 import { QuotaSheet } from "@/components/applications/quota-sheet";
 import { StatusAndEvents } from "@/components/applications/status-and-events";
@@ -55,7 +56,7 @@ function GeneratingState({
       <p className="mx-auto mt-2 max-w-[40ch] text-sm leading-relaxed text-muted-foreground">
         {stuck
           ? "This is taking longer than usual. The worker may have missed the job. Retry re-queues without using an extra credit while status is still pending."
-          : "Cover letter and fit report are generating from your profile and CV. This usually takes under a minute."}
+          : "Cover letter, tailored CV, and fit report are generating from your profile and CV. This usually takes under a minute."}
       </p>
       <p className="mt-4 font-mono text-xs uppercase tracking-wide text-muted-foreground">
         {status}
@@ -119,7 +120,7 @@ function RegenerateConfirm({
             </h2>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
               This uses one AI generation credit and overwrites the cover
-              letter, fit report, and job/profile/CV snapshots.
+              letter, tailored CV, fit report, and job/profile/CV snapshots.
             </p>
             <div className="mt-6 flex flex-col gap-2 sm:flex-row">
               <button
@@ -157,6 +158,7 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
   const [quotaOpen, setQuotaOpen] = useState(false);
   const [regenOpen, setRegenOpen] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [cvChoiceBusy, setCvChoiceBusy] = useState(false);
   const [generatingSince, setGeneratingSince] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
@@ -257,6 +259,31 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
     },
   });
 
+  async function handleCvChoiceChange(choice: "UPLOADED" | "GENERATED") {
+    if (!app || app.cvChoice === choice) return;
+    setCvChoiceBusy(true);
+    try {
+      const token = await getAccessToken();
+      const data = await apiFetch<ApplicationResponse>(
+        `/applications/${applicationId}`,
+        {
+          method: "PATCH",
+          token,
+          body: JSON.stringify({ cvChoice: choice }),
+        },
+      );
+      queryClient.setQueryData(
+        ["application", applicationId],
+        (old: ApplicationResponse | undefined) => ({
+          ...data,
+          events: data.events ?? old?.events,
+        }),
+      );
+    } finally {
+      setCvChoiceBusy(false);
+    }
+  }
+
   const regenMutation = useMutation({
     mutationFn: async () => {
       const token = await getAccessToken();
@@ -296,6 +323,8 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
   const isAi = app?.generationMode === "AI";
   const showLetter =
     !!app?.coverLetterContent || (completed && isAi);
+  const showCv =
+    !!app?.cvSnapshot || !!app?.generatedCv || (completed && isAi);
   const showAts = !!app?.atsReport;
   const title = app ? applicationTitle(app) : "Application";
   const company = app ? applicationCompany(app) : null;
@@ -447,6 +476,15 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
                   ) : null}
                 </div>
               )}
+
+              {showCv ? (
+                <GeneratedCvPanel
+                  app={app}
+                  cvChoice={app.cvChoice ?? "UPLOADED"}
+                  onCvChoiceChange={(choice) => void handleCvChoiceChange(choice)}
+                  busy={cvChoiceBusy}
+                />
+              ) : null}
 
               <ApplyPanel app={app} />
               <StatusAndEvents key={`${app.id}-${app.status}-${app.updatedAt}`} app={app} />

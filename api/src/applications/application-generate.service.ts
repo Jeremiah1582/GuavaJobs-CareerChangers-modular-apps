@@ -14,7 +14,7 @@ import { AppError } from '../shared/schemas/error.schema';
 import { GenerateApplicationInput } from '../shared/schemas/application.schema';
 import { UnifiedJob } from '../shared/schemas/job.schema';
 import { UsageService } from '../users/usage.service';
-import { toApplicationResponse } from './application.mapper';
+import { toApplicationResponse, applicationDetailInclude } from './application.mapper';
 import { IdempotencyService } from './idempotency.service';
 
 @Injectable()
@@ -74,7 +74,7 @@ export class ApplicationGenerateService {
 
     const duplicate = await this.prisma.application.findFirst({
       where: { userId, canonicalJobKey },
-      include: { atsReport: true },
+      include: applicationDetailInclude,
     });
     if (duplicate) {
       // Stuck PENDING/PROCESSING (worker down / Redis / LLM) — re-enqueue without a new row.
@@ -136,7 +136,7 @@ export class ApplicationGenerateService {
             jobLocation: job.location,
             applyUrl: job.applyUrl,
           },
-          include: { atsReport: true },
+          include: applicationDetailInclude,
         });
         if (idempotencyKey) {
           await this.idempotency.bind(userId, idempotencyKey, upgraded.id);
@@ -168,7 +168,7 @@ export class ApplicationGenerateService {
         jobLocation: job.location,
         applyUrl: job.applyUrl,
       },
-      include: { atsReport: true },
+      include: applicationDetailInclude,
     });
 
     if (idempotencyKey) {
@@ -306,7 +306,7 @@ export class ApplicationGenerateService {
   private async getOwnedApplication(userId: string, applicationId: string) {
     const app = await this.prisma.application.findFirst({
       where: { id: applicationId, userId },
-      include: { atsReport: true },
+      include: applicationDetailInclude,
     });
     if (!app) {
       throw new AppError('APPLICATION_NOT_FOUND', 'Application not found', 404);

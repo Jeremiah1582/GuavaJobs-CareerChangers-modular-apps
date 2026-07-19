@@ -1,5 +1,11 @@
 import { z } from 'zod';
 import { salaryPeriodSchema } from './enums.schema';
+import {
+  applicationCvChoiceSchema,
+  generatedCvResponseSchema,
+  hydratedGeneratedCvExportSchema,
+  storedGeneratedCvContentSchema,
+} from './generated-cv.schema';
 
 export const applicationStatusSchema = z.enum([
   'DRAFT',
@@ -24,6 +30,8 @@ export const generationStatusSchema = z.enum([
 export const generationModeSchema = z.enum(['AI', 'MANUAL']);
 
 export const coverLetterSourceSchema = z.enum(['AI', 'MANUAL']);
+
+export { applicationCvChoiceSchema };
 
 export const applicationAtsReportSchema = z.object({
   score: z.number().int().min(0).max(100),
@@ -88,6 +96,10 @@ export const applicationResponseSchema = z.object({
   coverLetterTemplateId: z.string(),
   coverLetterSource: coverLetterSourceSchema,
   coverLetterEdited: z.boolean(),
+  cvChoice: applicationCvChoiceSchema,
+  generatedCv: generatedCvResponseSchema.nullable(),
+  /** Hydrated export (identity merged) — present when generatedCv + user/profile loaded. */
+  generatedCvExport: hydratedGeneratedCvExportSchema.nullable().optional(),
   appliedAt: z.string().datetime().nullable(),
   atsReport: applicationAtsReportSchema.nullable(),
   events: z.array(applicationEventSummarySchema).optional(),
@@ -167,6 +179,9 @@ export const patchApplicationSchema = z
     applyUrl: z.string().url().nullable().optional(),
     coverLetterContent: z.string().max(50_000).optional(),
     coverLetterEdited: z.boolean().optional(),
+    cvChoice: applicationCvChoiceSchema.optional(),
+    /** Optional edit of anonymous GeneratedCv content (sets edited=true). */
+    generatedCvContent: storedGeneratedCvContentSchema.optional(),
     appliedAt: z.string().datetime().nullable().optional(),
     pastedJobDescription: z.string().max(50_000).nullable().optional(),
   })
@@ -181,6 +196,10 @@ export const listApplicationsQuerySchema = z.object({
 });
 
 export const hybridCoverLetterSchema = z.object({
+  pastedJobDescription: z.string().min(50).max(50_000).optional(),
+});
+
+export const hybridGenerateCvSchema = z.object({
   pastedJobDescription: z.string().min(50).max(50_000).optional(),
 });
 

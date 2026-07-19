@@ -4,7 +4,9 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowSquareOut,
   CheckCircle,
+  FileCode,
   FilePdf,
+  FileText,
   CircleNotch,
 } from "@phosphor-icons/react";
 import { useState } from "react";
@@ -108,11 +110,14 @@ export function ApplyPanel({ app }: { app: ApplicationResponse }) {
   const queryClient = useQueryClient();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
+  const [cvError, setCvError] = useState<string | null>(null);
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [cvBusy, setCvBusy] = useState(false);
 
   const title = applicationTitle(app);
   const company = applicationCompany(app);
   const alreadyApplied = app.status !== "DRAFT";
+  const useGeneratedCv = app.cvChoice === "GENERATED" && !!app.generatedCv;
 
   const confirmMutation = useMutation({
     mutationFn: async () => {
@@ -172,6 +177,40 @@ export function ApplyPanel({ app }: { app: ApplicationResponse }) {
     }
   }
 
+  async function downloadCv() {
+    setCvError(null);
+    setCvBusy(true);
+    try {
+      const token = await getAccessToken();
+      if (useGeneratedCv) {
+        const blob = await apiFetchBlob(
+          `/applications/${app.id}/generated-cv/json`,
+          { token },
+        );
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `generated-cv-${app.id}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } else {
+        const payload = await apiFetch<{ signedUrl: string; fileName: string }>(
+          `/profiles/${app.profileId}/cv/download`,
+          { token },
+        );
+        window.open(payload.signedUrl, "_blank", "noopener,noreferrer");
+      }
+    } catch (err) {
+      setCvError(
+        err instanceof ApiError
+          ? err.message
+          : "Could not download CV. Try again.",
+      );
+    } finally {
+      setCvBusy(false);
+    }
+  }
+
   function openApply() {
     if (!app.applyUrl) return;
     window.open(app.applyUrl, "_blank", "noopener,noreferrer");
@@ -183,6 +222,9 @@ export function ApplyPanel({ app }: { app: ApplicationResponse }) {
       setConfirmOpen(true);
     }
   }
+
+  const canDownloadCv =
+    useGeneratedCv || !!app.cvSnapshot || app.generationMode === "AI";
 
   return (
     <>
@@ -226,6 +268,24 @@ export function ApplyPanel({ app }: { app: ApplicationResponse }) {
             </button>
           ) : null}
 
+          {canDownloadCv ? (
+            <button
+              type="button"
+              disabled={cvBusy}
+              onClick={() => void downloadCv()}
+              className="inline-flex items-center gap-2 rounded-xl border border-guava-green/25 bg-white px-4 py-2.5 text-sm font-medium transition-colors hover:border-guava-green/45 disabled:opacity-50"
+            >
+              {cvBusy ? (
+                <CircleNotch className="size-4 animate-spin" weight="bold" />
+              ) : useGeneratedCv ? (
+                <FileCode className="size-4" weight="duotone" />
+              ) : (
+                <FileText className="size-4" weight="duotone" />
+              )}
+              {useGeneratedCv ? "Download CV JSON" : "Download CV file"}
+            </button>
+          ) : null}
+
           {app.applyUrl && alreadyApplied ? (
             <button
               type="button"
@@ -240,6 +300,11 @@ export function ApplyPanel({ app }: { app: ApplicationResponse }) {
         {pdfError ? (
           <p className="mt-3 text-sm text-destructive" role="alert">
             {pdfError}
+          </p>
+        ) : null}
+        {cvError ? (
+          <p className="mt-3 text-sm text-destructive" role="alert">
+            {cvError}
           </p>
         ) : null}
 

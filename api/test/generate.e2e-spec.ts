@@ -73,5 +73,21 @@ describe('Money path — async generate (e2e)', () => {
       missingKeywords: expect.any(Array),
       suggestions: expect.any(Array),
     });
+    expect(completed.generatedCv).toMatchObject({
+      content: expect.objectContaining({
+        label: expect.any(String),
+        summary: expect.any(String),
+        work: expect.any(Array),
+      }),
+      edited: false,
+    });
+    expect(completed.cvChoice).toBe('GENERATED');
+    expect(
+      (completed.generatedCvExport as { basics?: { name?: string; email?: string } })
+        ?.basics,
+    ).toMatchObject({
+      name: expect.any(String),
+      email: expect.any(String),
+    });
   }, 45_000);
 });

@@ -90,7 +90,49 @@ export function HybridAiPanel({ app }: { app: ApplicationResponse }) {
     },
   });
 
-  const busy = letterMutation.isPending || atsMutation.isPending;
+  const cvMutation = useMutation({
+    mutationFn: async () => {
+      if (!jdOk) {
+        throw new ApiError(
+          "Paste a job description of at least 50 characters.",
+          { status: 400, code: "JD_TOO_SHORT" },
+        );
+      }
+      const token = await getAccessToken();
+      return apiFetch<ApplicationResponse>(
+        `/applications/${app.id}/generate-cv`,
+        {
+          method: "POST",
+          token,
+          body: JSON.stringify({
+            pastedJobDescription: jd.trim() || undefined,
+          }),
+        },
+      );
+    },
+    onSuccess: (data) => {
+      setError(null);
+      queryClient.setQueryData(["application", app.id], data);
+      track(AnalyticsEvents.generate_started, {
+        applicationId: data.id,
+        mode: "hybrid_generate_cv",
+      });
+      void queryClient.invalidateQueries({ queryKey: ["me"] });
+    },
+    onError: (err) => {
+      if (err instanceof ApiError && err.code === "QUOTA_EXCEEDED") {
+        track(AnalyticsEvents.quota_hit, { source: "hybrid_generate_cv" });
+        setQuotaOpen(true);
+        return;
+      }
+      setError(
+        err instanceof ApiError ? err.message : "Could not start CV generation.",
+      );
+    },
+  });
+
+  const busy =
+    letterMutation.isPending || atsMutation.isPending || cvMutation.isPending;
 
   return (
     <>
@@ -99,7 +141,7 @@ export function HybridAiPanel({ app }: { app: ApplicationResponse }) {
           Optional AI (counts toward quota)
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Generate a cover letter or fit report from a pasted job description.
+          Generate a cover letter, tailored CV, or fit report from a pasted job description.
           Manual tracking stays free either way.
         </p>
 
@@ -152,6 +194,17 @@ export function HybridAiPanel({ app }: { app: ApplicationResponse }) {
               <CircleNotch className="size-4 animate-spin" weight="bold" />
             ) : null}
             Generate fit report
+          </button>
+          <button
+            type="button"
+            disabled={busy || !jdOk}
+            onClick={() => cvMutation.mutate()}
+            className="inline-flex items-center gap-2 rounded-xl border border-guava-green/25 bg-white px-4 py-2.5 text-sm font-medium disabled:opacity-50"
+          >
+            {cvMutation.isPending ? (
+              <CircleNotch className="size-4 animate-spin" weight="bold" />
+            ) : null}
+            Generate tailored CV
           </button>
         </div>
       </PaperPanel>

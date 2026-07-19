@@ -15,6 +15,7 @@ const workerProviders = shouldRunBullmqWorkers() ? [CvParseProcessor] : [];
     BullModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService<EnvConfig, true>) => ({
+        prefix: process.env.BULLMQ_PREFIX || 'bull',
         connection: {
           url: config.get('REDIS_URL', { infer: true }),
         },

@@ -168,6 +168,64 @@ export type ApplicationEvent = {
   updatedAt?: string;
 };
 
+export type ApplicationCvChoice = "UPLOADED" | "GENERATED";
+
+export type GeneratedCvWorkEntry = {
+  position: string;
+  name: string;
+  location?: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  highlights: string[];
+  summary?: string;
+};
+
+export type GeneratedCvContent = {
+  label?: string | null;
+  summary?: string | null;
+  coreCompetencies: string[];
+  work: GeneratedCvWorkEntry[];
+  education: Array<{
+    institution: string;
+    studyType?: string | null;
+    area?: string | null;
+    startDate?: string | null;
+    endDate?: string | null;
+  }>;
+  skills: Array<{ name: string; keywords?: string[] }>;
+  certificates: Array<Record<string, unknown>>;
+  projects: Array<Record<string, unknown>>;
+  languages: Array<{ language: string; fluency?: string | null }>;
+  awards: Array<Record<string, unknown>>;
+  volunteer: Array<Record<string, unknown>>;
+  meta: {
+    schemaVersion: string;
+    tailoredFor?: string;
+    generatedAt: string;
+  };
+};
+
+export type GeneratedCvResponse = {
+  id: string;
+  content: GeneratedCvContent;
+  edited: boolean;
+  templateId: string;
+  sourceCvDocumentId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type GeneratedCvExport = GeneratedCvContent & {
+  basics: {
+    name: string;
+    email: string;
+    phone: string | null;
+    label: string;
+    location?: { city: string | null; country: string | null };
+    profiles: Array<{ network: string; url: string }>;
+  };
+};
+
 export type ApplicationResponse = {
   id: string;
   userId: string;
@@ -191,6 +249,9 @@ export type ApplicationResponse = {
   coverLetterTemplateId: string;
   coverLetterSource: "AI" | "MANUAL";
   coverLetterEdited: boolean;
+  cvChoice: ApplicationCvChoice;
+  generatedCv?: GeneratedCvResponse | null;
+  generatedCvExport?: GeneratedCvExport | null;
   appliedAt?: string | null;
   atsReport: ApplicationAtsReport | null;
   events?: ApplicationEvent[];

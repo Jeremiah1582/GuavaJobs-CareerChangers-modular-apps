@@ -76,6 +76,11 @@ enum CoverLetterSource {
   MANUAL
 }
 
+enum ApplicationCvChoice {
+  UPLOADED
+  GENERATED
+}
+
 enum ApplicationEventType {
   RESPONSE
   INTERVIEW
@@ -131,6 +136,7 @@ model User {
 
   profiles     Profile[]
   applications Application[]
+  generatedCvs GeneratedCv[]
 
   @@index([email])
   @@map("users")
@@ -176,6 +182,7 @@ model Profile {
   cvDocuments          CvDocument[]          @relation("ProfileCvs")
   generalAtsAssessment ProfileAtsAssessment?
   applications         Application[]
+  generatedCvs         GeneratedCv[]
 
   @@index([userId])
   @@index([userId, isDefault])
@@ -286,6 +293,8 @@ model Application {
   coverLetterSource     CoverLetterSource @default(AI)
   coverLetterEdited     Boolean           @default(false)
 
+  cvChoice ApplicationCvChoice @default(UPLOADED)
+
   appliedAt DateTime?
 
   rejectionPhase       ApplicationRejectionPhase?
@@ -297,10 +306,11 @@ model Application {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user      User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  profile   Profile               @relation(fields: [profileId], references: [id], onDelete: Restrict)
-  atsReport ApplicationAtsReport?
-  events    ApplicationEvent[]
+  user         User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profile      Profile               @relation(fields: [profileId], references: [id], onDelete: Restrict)
+  atsReport    ApplicationAtsReport?
+  generatedCv  GeneratedCv?
+  events       ApplicationEvent[]
 
   @@unique([userId, canonicalJobKey])
   @@index([userId])
@@ -333,6 +343,29 @@ model ApplicationAtsReport {
   application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
 
   @@map("application_ats_reports")
+}
+
+// ─── Job-tailored CV JSON (anonymous body; identity hydrated at read time) ───
+
+model GeneratedCv {
+  id                 String   @id @default(cuid())
+  userId             String
+  applicationId      String   @unique
+  profileId          String
+  sourceCvDocumentId String?
+  content            Json
+  edited             Boolean  @default(false)
+  templateId         String   @default("json-ats-v1")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  profile     Profile     @relation(fields: [profileId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@index([profileId])
+  @@map("generated_cvs")
 }
 
 // ─── Application event log (notes, next steps, interviews, responses) ────────

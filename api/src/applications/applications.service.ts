@@ -6,7 +6,11 @@ import {
   ListApplicationsQuery,
   PatchApplicationInput,
 } from '../shared/schemas/application.schema';
-import { toApplicationResponse } from './application.mapper';
+import {
+  applicationDetailInclude,
+  applicationListInclude,
+  toApplicationResponse,
+} from './application.mapper';
 
 @Injectable()
 export class ApplicationsService {
@@ -27,7 +31,7 @@ export class ApplicationsService {
     const apps = await this.prisma.application.findMany({
       where,
       orderBy: { updatedAt: 'desc' },
-      include: { atsReport: true },
+      include: applicationListInclude,
     });
 
     return apps.map((a) => toApplicationResponse(a));
@@ -36,7 +40,10 @@ export class ApplicationsService {
   async getById(userId: string, applicationId: string) {
     const app = await this.prisma.application.findFirst({
       where: { id: applicationId, userId },
-      include: { atsReport: true, events: { orderBy: { occurredAt: 'desc' } } },
+      include: {
+        ...applicationDetailInclude,
+        events: { orderBy: { occurredAt: 'desc' } },
+      },
     });
     if (!app) {
       throw new AppError('APPLICATION_NOT_FOUND', 'Application not found', 404);
@@ -47,33 +54,91 @@ export class ApplicationsService {
   async patch(userId: string, applicationId: string, input: PatchApplicationInput) {
     await this.assertOwned(userId, applicationId);
 
+    const {
+      generatedCvContent,
+      cvChoice,
+      jobStartDate,
+      appliedAt,
+      coverLetterContent,
+      coverLetterEdited,
+      ...rest
+    } = input;
+
     const data: Prisma.ApplicationUpdateInput = {
-      ...input,
+      ...rest,
+      ...(cvChoice !== undefined ? { cvChoice } : {}),
       jobStartDate:
-        input.jobStartDate === undefined
+        jobStartDate === undefined
           ? undefined
-          : input.jobStartDate
-            ? new Date(input.jobStartDate)
+          : jobStartDate
+            ? new Date(jobStartDate)
             : null,
       appliedAt:
-        input.appliedAt === undefined
+        appliedAt === undefined
           ? undefined
-          : input.appliedAt
-            ? new Date(input.appliedAt)
+          : appliedAt
+            ? new Date(appliedAt)
             : null,
     };
 
-    if (input.coverLetterContent !== undefined) {
-      data.coverLetterEdited = input.coverLetterEdited ?? true;
+    if (coverLetterContent !== undefined) {
+      data.coverLetterContent = coverLetterContent;
+      data.coverLetterEdited = coverLetterEdited ?? true;
+    }
+
+    if (generatedCvContent) {
+      const existing = await this.prisma.generatedCv.findUnique({
+        where: { applicationId },
+      });
+      if (!existing) {
+        throw new AppError(
+          'GENERATED_CV_NOT_FOUND',
+          'No generated CV on this application',
+          400,
+        );
+      }
+      await this.prisma.generatedCv.update({
+        where: { applicationId },
+        data: {
+          content: generatedCvContent as Prisma.InputJsonValue,
+          edited: true,
+        },
+      });
     }
 
     const app = await this.prisma.application.update({
       where: { id: applicationId },
       data,
-      include: { atsReport: true },
+      include: applicationDetailInclude,
     });
 
     return toApplicationResponse(app);
+  }
+
+  async getHydratedGeneratedCvExport(userId: string, applicationId: string) {
+    const app = await this.prisma.application.findFirst({
+      where: { id: applicationId, userId },
+      include: applicationDetailInclude,
+    });
+    if (!app) {
+      throw new AppError('APPLICATION_NOT_FOUND', 'Application not found', 404);
+    }
+    if (!app.generatedCv) {
+      throw new AppError(
+        'GENERATED_CV_NOT_FOUND',
+        'No generated CV on this application',
+        404,
+      );
+    }
+    const response = toApplicationResponse(app);
+    if (!response.generatedCvExport) {
+      throw new AppError(
+        'GENERATED_CV_INVALID',
+        'Generated CV could not be hydrated',
+        500,
+      );
+    }
+    return response.generatedCvExport;
   }
 
   private async assertOwned(userId: string, applicationId: string) {

@@ -12,7 +12,7 @@ import { AI_GENERATION_QUEUE, AiGenerationJobData } from '../queue/queue.constan
 import { AppError } from '../shared/schemas/error.schema';
 import { CreateManualApplicationInput } from '../shared/schemas/application.schema';
 import { UsageService } from '../users/usage.service';
-import { toApplicationResponse } from './application.mapper';
+import { toApplicationResponse, applicationDetailInclude } from './application.mapper';
 
 @Injectable()
 export class ApplicationManualService {
@@ -36,7 +36,7 @@ export class ApplicationManualService {
       const canonicalJobKey = input.canonicalJobKey.toLowerCase();
       const existing = await this.prisma.application.findFirst({
         where: { userId, canonicalJobKey },
-        include: { atsReport: true },
+        include: applicationDetailInclude,
       });
       if (existing) {
         return toApplicationResponse(existing);
@@ -65,7 +65,7 @@ export class ApplicationManualService {
           jobSalaryCurrency: job.salaryCurrency ?? undefined,
           pastedJobDescription: job.description?.slice(0, 50_000) || undefined,
         },
-        include: { atsReport: true },
+        include: applicationDetailInclude,
       });
 
       return toApplicationResponse(app);
@@ -104,7 +104,7 @@ export class ApplicationManualService {
         applyUrl: input.applyUrl,
         pastedJobDescription: input.pastedJobDescription,
       },
-      include: { atsReport: true },
+      include: applicationDetailInclude,
     });
 
     return toApplicationResponse(app);
@@ -145,7 +145,7 @@ export class ApplicationManualService {
     return toApplicationResponse(
       await this.prisma.application.findFirstOrThrow({
         where: { id: applicationId },
-        include: { atsReport: true },
+        include: applicationDetailInclude,
       }),
     );
   }
@@ -174,7 +174,59 @@ export class ApplicationManualService {
     return toApplicationResponse(
       await this.prisma.application.findFirstOrThrow({
         where: { id: applicationId },
-        include: { atsReport: true },
+        include: applicationDetailInclude,
+      }),
+    );
+  }
+
+  async generateCv(
+    userId: string,
+    applicationId: string,
+    pastedJobDescription?: string,
+  ) {
+    await this.usage.assertCanGenerateAi(userId);
+    const app = await this.findManual(userId, applicationId);
+
+    const profile = await this.prisma.profile.findFirst({
+      where: { id: app.profileId, userId },
+      include: { currentCv: true },
+    });
+    if (!profile?.currentCv?.parsedText) {
+      throw new AppError(
+        'CV_REQUIRED',
+        'Upload and parse a CV before generating a tailored CV',
+        400,
+      );
+    }
+
+    if (pastedJobDescription) {
+      await this.prisma.application.update({
+        where: { id: applicationId },
+        data: { pastedJobDescription },
+      });
+    }
+
+    await this.prisma.application.update({
+      where: { id: applicationId },
+      data: {
+        generationStatus: ApplicationGenerationStatus.PENDING,
+        generationError: null,
+      },
+    });
+
+    await this.aiQueue.add(
+      'hybrid-generate-cv',
+      { type: 'hybrid-generate-cv', applicationId, userId },
+      {
+        jobId: `hybrid-cv-${applicationId}-${Date.now()}`,
+        attempts: 2,
+      },
+    );
+
+    return toApplicationResponse(
+      await this.prisma.application.findFirstOrThrow({
+        where: { id: applicationId },
+        include: applicationDetailInclude,
       }),
     );
   }

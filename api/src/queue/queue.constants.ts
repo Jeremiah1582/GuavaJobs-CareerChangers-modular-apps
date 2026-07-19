@@ -11,7 +11,8 @@ export type AiGenerationJobType =
   | 'generate'
   | 'regenerate'
   | 'hybrid-cover-letter'
-  | 'hybrid-ats-report';
+  | 'hybrid-ats-report'
+  | 'hybrid-generate-cv';
 
 export type AiGenerationJobData = {
   type: AiGenerationJobType;
