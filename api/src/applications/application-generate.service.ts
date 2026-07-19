@@ -194,11 +194,17 @@ export class ApplicationGenerateService {
       );
     }
 
-    const stuck =
+    const inFlight =
       app.generationStatus === ApplicationGenerationStatus.PENDING ||
       app.generationStatus === ApplicationGenerationStatus.PROCESSING;
+    const stuck = this.isStuckGeneration(app);
     const failed =
       app.generationStatus === ApplicationGenerationStatus.FAILED;
+
+    // Already generating and not stuck — idempotent: do not pile up jobs.
+    if (inFlight && !stuck) {
+      return toApplicationResponse(app);
+    }
 
     // Re-queue of a stuck/failed job must not consume another quota credit
     // if the prior attempt never completed successfully.
@@ -214,8 +220,8 @@ export class ApplicationGenerateService {
       },
     });
 
-    await this.enqueue({
-      type: stuck || failed ? 'generate' : 'regenerate',
+    await this.enqueueFullPackage({
+      type: 'regenerate',
       applicationId,
       userId,
     });
@@ -239,7 +245,7 @@ export class ApplicationGenerateService {
     return ageMs >= ApplicationGenerateService.STUCK_MS;
   }
 
-  private static readonly STUCK_MS = 30_000;
+  private static readonly STUCK_MS = 90_000;
 
   private async requeueGeneration(
     userId: string,
@@ -257,7 +263,11 @@ export class ApplicationGenerateService {
           : {}),
       },
     });
-    await this.enqueue({ type, applicationId, userId });
+    if (type === 'generate' || type === 'regenerate') {
+      await this.enqueueFullPackage({ type, applicationId, userId });
+    } else {
+      await this.enqueue({ type, applicationId, userId });
+    }
   }
 
   private toJobSnapshot(job: UnifiedJob): Record<string, unknown> {
@@ -275,7 +285,38 @@ export class ApplicationGenerateService {
     };
   }
 
+  /**
+   * One in-flight full package per application. Stable jobId prevents stacked
+   * regenerate/generate workers racing the same row.
+   */
+  private async enqueueFullPackage(data: AiGenerationJobData): Promise<void> {
+    const jobId = `ai-pkg-${data.applicationId}`;
+    try {
+      const existing = await this.aiQueue.getJob(jobId);
+      if (existing) {
+        const state = await existing.getState();
+        if (state === 'active' || state === 'waiting' || state === 'delayed') {
+          return;
+        }
+        await existing.remove().catch(() => undefined);
+      }
+      await this.aiQueue.add(data.type, data, {
+        jobId,
+        removeOnComplete: 50,
+        removeOnFail: 50,
+        attempts: 2,
+        backoff: { type: 'exponential', delay: 3000 },
+      });
+    } catch (error) {
+      await this.markQueueFailed(data.applicationId, error);
+    }
+  }
+
   private async enqueue(data: AiGenerationJobData): Promise<void> {
+    if (data.type === 'generate' || data.type === 'regenerate') {
+      await this.enqueueFullPackage(data);
+      return;
+    }
     try {
       await this.aiQueue.add(data.type, data, {
         jobId: `${data.type}-${data.applicationId}-${Date.now()}`,
@@ -285,22 +326,29 @@ export class ApplicationGenerateService {
         backoff: { type: 'exponential', delay: 3000 },
       });
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Failed to enqueue AI job';
-      await this.prisma.application.update({
-        where: { id: data.applicationId },
-        data: {
-          generationStatus: ApplicationGenerationStatus.FAILED,
-          generationError: `Queue unavailable: ${message}`,
-        },
-      });
-      throw new AppError(
-        'QUEUE_UNAVAILABLE',
-        'Could not start generation — queue is unavailable. Try again shortly.',
-        503,
-        { message },
-      );
+      await this.markQueueFailed(data.applicationId, error);
     }
+  }
+
+  private async markQueueFailed(
+    applicationId: string,
+    error: unknown,
+  ): Promise<never> {
+    const message =
+      error instanceof Error ? error.message : 'Failed to enqueue AI job';
+    await this.prisma.application.update({
+      where: { id: applicationId },
+      data: {
+        generationStatus: ApplicationGenerationStatus.FAILED,
+        generationError: `Queue unavailable: ${message}`,
+      },
+    });
+    throw new AppError(
+      'QUEUE_UNAVAILABLE',
+      'Could not start generation — queue is unavailable. Try again shortly.',
+      503,
+      { message },
+    );
   }
 
   private async getOwnedApplication(userId: string, applicationId: string) {

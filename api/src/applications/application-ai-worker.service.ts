@@ -10,6 +10,7 @@ import { GeneratedCvGenerator } from '../ai/generated-cv.generator';
 import { JobFactsParser } from '../ai/job-facts.parser';
 import { JobsService } from '../jobs/jobs.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { preferencesFromMetadata } from '../shared/schemas/user.schema';
 import { UsageService } from '../users/usage.service';
 import { AiGenerationJobData } from '../queue/queue.constants';
 import { ApplicationSnapshotService } from './application-snapshot.service';
@@ -77,16 +78,41 @@ export class ApplicationAiWorkerService {
       throw new Error('Missing canonicalJobKey');
     }
 
-    const jobData = await this.resolveJobForWorker(
-      app.canonicalJobKey,
-      app.jobSnapshot,
-    );
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: job.userId },
+      select: { metadata: true },
+    });
+    const prefs = preferencesFromMetadata(user.metadata);
+    const existingGeneratedCv = await this.prisma.generatedCv.findUnique({
+      where: { applicationId: app.id },
+      select: { id: true },
+    });
+    // Regenerate tailored CV when preference is on, user already has one, or chose GENERATED.
+    const shouldGenerateCv =
+      prefs.autoGenerateTailoredCv ||
+      !!existingGeneratedCv ||
+      app.cvChoice === 'GENERATED';
+
+    const jobData = await this.resolveJobForWorker({
+      canonicalJobKey: app.canonicalJobKey,
+      jobSnapshot: app.jobSnapshot,
+      pastedJobDescription: app.pastedJobDescription,
+      jobRoleTitle: app.jobRoleTitle,
+      companyName: app.companyName,
+      applyUrl: app.applyUrl,
+    });
     const bundle = await this.snapshots.buildForGenerate(
       job.userId,
       app.profileId,
       app.id,
       jobData,
     );
+
+    // Prefer pasted full JD, then snapshot description, then resolved job.
+    const jobDescription =
+      app.pastedJobDescription?.trim() ||
+      String(jsonField(bundle.jobSnapshot, 'description') ?? '') ||
+      jobData.description;
 
     const facts = this.jobFacts.parseFromJob(jobData);
     const cvText = String(bundle.cvSnapshot.parsedText ?? '');
@@ -95,36 +121,50 @@ export class ApplicationAiWorkerService {
         ? bundle.cvSnapshot.cvDocumentId
         : null;
 
+    const genInput = {
+      jobTitle: jobData.title,
+      companyName: jobData.company,
+      jobDescription,
+      profileSummary: bundle.profileSnapshot,
+      cvText,
+    };
+
+    // Soft-fail GeneratedCv so a Zod/LLM CV error never blocks letter + ATS.
     const [coverLetter, generatedCv] = await Promise.all([
-      this.coverLetterGen.generate({
-        jobTitle: jobData.title,
-        companyName: jobData.company,
-        jobDescription: jobData.description,
-        profileSummary: bundle.profileSnapshot,
-        cvText,
-      }),
-      this.generatedCvGen.generate({
-        jobTitle: jobData.title,
-        companyName: jobData.company,
-        jobDescription: jobData.description,
-        profileSummary: bundle.profileSnapshot,
-        cvText,
-      }),
+      this.coverLetterGen.generate(genInput),
+      shouldGenerateCv
+        ? this.generatedCvGen.generate(genInput).catch((error: unknown) => {
+            const message =
+              error instanceof Error ? error.message : 'Generated CV failed';
+            this.logger.warn(
+              `GeneratedCv soft-failed for ${app.id} (package continues): ${message}`,
+            );
+            return null;
+          })
+        : Promise.resolve(null),
     ]);
 
     const ats = await this.atsReportGen.generate({
       jobTitle: jobData.title,
       companyName: jobData.company,
-      jobDescription: jobData.description,
+      jobDescription,
       coverLetter: coverLetter.coverLetter,
       cvText,
     });
+
+    // Keep pasted JD in snapshot.description when present so UI + regen stay aligned.
+    const jobSnapshot: Record<string, unknown> = {
+      ...bundle.jobSnapshot,
+      ...(app.pastedJobDescription?.trim()
+        ? { description: app.pastedJobDescription.trim() }
+        : {}),
+    };
 
     await this.prisma.$transaction(async (tx) => {
       await tx.application.update({
         where: { id: app.id },
         data: {
-          jobSnapshot: bundle.jobSnapshot as Prisma.InputJsonValue,
+          jobSnapshot: jobSnapshot as Prisma.InputJsonValue,
           profileSnapshot: bundle.profileSnapshot as Prisma.InputJsonValue,
           cvSnapshot: bundle.cvSnapshot as Prisma.InputJsonValue,
           cvStorageKey: bundle.cvStorageKey,
@@ -133,30 +173,32 @@ export class ApplicationAiWorkerService {
           coverLetterContent: coverLetter.coverLetter,
           coverLetterSource: 'AI',
           coverLetterEdited: false,
-          cvChoice: 'GENERATED',
+          // Stay UPLOADED unless user explicitly generates/switches to tailored CV.
           generationStatus: ApplicationGenerationStatus.COMPLETED,
           generationError: null,
           ...facts,
         },
       });
 
-      await tx.generatedCv.upsert({
-        where: { applicationId: app.id },
-        create: {
-          userId: job.userId,
-          applicationId: app.id,
-          profileId: app.profileId,
-          sourceCvDocumentId,
-          content: generatedCv.content as Prisma.InputJsonValue,
-          edited: false,
-          templateId: 'json-ats-v1',
-        },
-        update: {
-          sourceCvDocumentId,
-          content: generatedCv.content as Prisma.InputJsonValue,
-          edited: false,
-        },
-      });
+      if (generatedCv) {
+        await tx.generatedCv.upsert({
+          where: { applicationId: app.id },
+          create: {
+            userId: job.userId,
+            applicationId: app.id,
+            profileId: app.profileId,
+            sourceCvDocumentId,
+            content: generatedCv.content as Prisma.InputJsonValue,
+            edited: false,
+            templateId: 'json-ats-v1',
+          },
+          update: {
+            sourceCvDocumentId,
+            content: generatedCv.content as Prisma.InputJsonValue,
+            edited: false,
+          },
+        });
+      }
 
       await tx.applicationAtsReport.upsert({
         where: { applicationId: app.id },
@@ -195,19 +237,23 @@ export class ApplicationAiWorkerService {
     await this.usage.incrementAiUsage(job.userId);
   }
 
-  private async resolveJobForWorker(
-    canonicalJobKey: string,
-    storedSnapshot: unknown,
-  ): Promise<import('../shared/schemas/job.schema').UnifiedJob> {
+  private async resolveJobForWorker(app: {
+    canonicalJobKey: string;
+    jobSnapshot: unknown;
+    pastedJobDescription: string | null;
+    jobRoleTitle: string | null;
+    companyName: string | null;
+    applyUrl: string | null;
+  }): Promise<import('../shared/schemas/job.schema').UnifiedJob> {
     try {
-      return await this.jobs.getByCanonicalKey(canonicalJobKey, {
+      return await this.jobs.getByCanonicalKey(app.canonicalJobKey, {
         expandAts: true,
       });
     } catch (error) {
-      const fromStore = this.jobFromSnapshot(canonicalJobKey, storedSnapshot);
+      const fromStore = this.jobFromStoredData(app);
       if (fromStore) {
         this.logger.warn(
-          `Worker using stored jobSnapshot for ${canonicalJobKey} (cache miss)`,
+          `Worker using stored job data for ${app.canonicalJobKey} (cache miss)`,
         );
         return fromStore;
       }
@@ -215,46 +261,73 @@ export class ApplicationAiWorkerService {
     }
   }
 
-  private jobFromSnapshot(
-    canonicalJobKey: string,
-    snapshot: unknown,
-  ): import('../shared/schemas/job.schema').UnifiedJob | null {
-    if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
-      return null;
-    }
-    const row = snapshot as Record<string, unknown>;
-    const title = typeof row.title === 'string' ? row.title : null;
-    const company = typeof row.company === 'string' ? row.company : null;
+  private jobFromStoredData(app: {
+    canonicalJobKey: string;
+    jobSnapshot: unknown;
+    pastedJobDescription: string | null;
+    jobRoleTitle: string | null;
+    companyName: string | null;
+    applyUrl: string | null;
+  }): import('../shared/schemas/job.schema').UnifiedJob | null {
+    const row =
+      app.jobSnapshot &&
+      typeof app.jobSnapshot === 'object' &&
+      !Array.isArray(app.jobSnapshot)
+        ? (app.jobSnapshot as Record<string, unknown>)
+        : null;
+
+    const title =
+      (typeof row?.title === 'string' && row.title.trim()) ||
+      app.jobRoleTitle?.trim() ||
+      null;
+    const company =
+      (typeof row?.company === 'string' && row.company.trim()) ||
+      app.companyName?.trim() ||
+      null;
+
+    const snapshotDescription =
+      typeof row?.description === 'string' ? row.description.trim() : '';
+    const snapshotSnippet =
+      typeof row?.snippet === 'string' ? row.snippet.trim() : '';
+    const pasted = app.pastedJobDescription?.trim() ?? '';
+
     const description =
-      typeof row.description === 'string' ? row.description : null;
+      pasted ||
+      snapshotDescription ||
+      snapshotSnippet ||
+      (title && company ? `${title} at ${company}` : '');
+
     if (!title || !company || !description) {
       return null;
     }
+
     const applyUrl =
-      typeof row.applyUrl === 'string' && row.applyUrl
-        ? row.applyUrl
-        : 'https://www.adzuna.com';
+      app.applyUrl?.trim() ||
+      (typeof row?.applyUrl === 'string' && row.applyUrl.trim()) ||
+      'https://www.adzuna.com';
+
     return {
-      canonicalKey: canonicalJobKey,
+      canonicalKey: app.canonicalJobKey,
       title,
       company,
-      location: typeof row.location === 'string' ? row.location : null,
+      location:
+        typeof row?.location === 'string' ? row.location : null,
       snippet: description.slice(0, 280),
       description,
       applyUrl,
       atsType:
-        row.atsType === 'greenhouse' ||
-        row.atsType === 'lever' ||
-        row.atsType === 'ashby' ||
-        row.atsType === 'adzuna' ||
-        row.atsType === 'unknown'
+        row?.atsType === 'greenhouse' ||
+        row?.atsType === 'lever' ||
+        row?.atsType === 'ashby' ||
+        row?.atsType === 'adzuna' ||
+        row?.atsType === 'unknown'
           ? row.atsType
           : 'adzuna',
       hasFullDescription: description.length > 200,
       applyType: applyUrl.startsWith('http') ? 'url' : 'unknown',
       source: 'adzuna',
       fetchedAt:
-        typeof row.fetchedAt === 'string'
+        typeof row?.fetchedAt === 'string'
           ? row.fetchedAt
           : new Date().toISOString(),
     };
