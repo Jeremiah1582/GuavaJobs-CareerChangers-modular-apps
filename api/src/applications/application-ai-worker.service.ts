@@ -21,6 +21,22 @@ import {
   resolveJobDescriptionForAts,
   serializeCareerContent,
 } from './application-ats.fingerprint';
+import { AppError } from '../shared/schemas/error.schema';
+
+function normalizeGenerationError(error: unknown): string {
+  if (error instanceof AppError) return error.message;
+  if (error instanceof Error) {
+    if (
+      error.name === 'TimeoutError' ||
+      error.name === 'AbortError' ||
+      /aborted due to timeout|timed out/i.test(error.message)
+    ) {
+      return 'AI generation timed out. Try again — if this keeps happening, switch to a faster chat model (e.g. deepseek/deepseek-chat).';
+    }
+    return error.message;
+  }
+  return 'AI generation failed';
+}
 
 @Injectable()
 export class ApplicationAiWorkerService {
@@ -80,8 +96,7 @@ export class ApplicationAiWorkerService {
           break;
       }
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'AI generation failed';
+      const message = normalizeGenerationError(error);
       this.logger.error(`Job ${job.type} failed for ${job.applicationId}: ${message}`);
 
       if (

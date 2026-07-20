@@ -9,7 +9,11 @@ import type { ApplicationResponse, MeResponse } from "@/api/types";
 import { QuotaChip } from "@/components/app/quota-chip";
 import { QuotaSheet } from "@/components/applications/quota-sheet";
 import { AnalyticsEvents, track } from "@/lib/analytics";
-import { setHasApplicationsCookie } from "@/lib/applications";
+import { setHasApplicationsCookie, applicationTitle } from "@/lib/applications";
+import {
+  requestGenerationNotificationPermission,
+  watchGeneration,
+} from "@/lib/generation-watch";
 import { getAccessToken } from "@/lib/session";
 
 export function GenerateCta({
@@ -93,6 +97,8 @@ export function GenerateCta({
       setError(null);
       setNextAction(null);
       setHasApplicationsCookie(true);
+      void requestGenerationNotificationPermission();
+      watchGeneration(data.id, applicationTitle(data));
       if (
         data.generationStatus === "PENDING" ||
         data.generationStatus === "PROCESSING"

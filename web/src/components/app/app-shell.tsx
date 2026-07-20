@@ -15,6 +15,7 @@ import {
   AppSidebarSpacer,
 } from "@/components/app/app-sidebar";
 import { OfflineBanner } from "@/components/ui/state-panel";
+import { GenerationWatchProvider } from "@/components/app/generation-watch-provider";
 import { useOnlineStatus } from "@/lib/online";
 
 const links = [
@@ -47,6 +48,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <OfflineBanner online={online} />
+        <GenerationWatchProvider />
 
         {/* Phone-only top bar */}
         <header className="sticky top-0 z-40 border-b border-guava-green/10 bg-white/80 backdrop-blur-md sm:hidden">

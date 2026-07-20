@@ -310,10 +310,17 @@ export function isGeneratingStatus(
 
 /**
  * Adaptive poll interval while package generation is in flight.
- * Fast early (catch quick completes), then back off to cut network noise.
+ * Fast early (catch quick completes), then back off — keep polling up to ~10 min.
  */
 export function generationPollIntervalMs(elapsedMs: number): number {
   if (elapsedMs < 15_000) return 1_500;
-  if (elapsedMs < 60_000) return 3_000;
-  return 5_000;
+  if (elapsedMs < 120_000) return 3_000;
+  if (elapsedMs < 300_000) return 5_000;
+  return 8_000;
 }
+
+/** UI: normal expectation before "background" copy kicks in. */
+export const GENERATION_BACKGROUND_HINT_MS = 120_000;
+
+/** UI: offer manual retry if still in-flight after this long. */
+export const GENERATION_STUCK_UI_MS = 300_000;

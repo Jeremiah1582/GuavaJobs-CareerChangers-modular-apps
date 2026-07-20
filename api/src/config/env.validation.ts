@@ -25,6 +25,8 @@ export const envSchema = z
     OPENROUTER_MODEL: z.string().optional(),
     /** Comma-separated OpenRouter fallback models after the primary (429 / outage). */
     OPENROUTER_FALLBACK_MODELS: z.string().optional(),
+    /** Per-request LLM timeout (ms). Package jobs run several calls sequentially. */
+    LLM_TIMEOUT_MS: z.coerce.number().int().positive().default(120_000),
     ADZUNA_APP_ID: z.string().optional(),
     ADZUNA_APP_KEY: z.string().optional(),
     ADZUNA_API_KEY: z.string().optional(),

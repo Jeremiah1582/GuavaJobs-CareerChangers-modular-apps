@@ -245,7 +245,7 @@ export class ApplicationGenerateService {
     return ageMs >= ApplicationGenerateService.STUCK_MS;
   }
 
-  private static readonly STUCK_MS = 90_000;
+  private static readonly STUCK_MS = 300_000;
 
   private async requeueGeneration(
     userId: string,

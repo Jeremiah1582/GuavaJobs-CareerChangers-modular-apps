@@ -7,7 +7,12 @@ import {
   AiGenerationJobData,
 } from './queue.constants';
 
-@Processor(AI_GENERATION_QUEUE)
+@Processor(AI_GENERATION_QUEUE, {
+  concurrency: 2,
+  /** Full package = cover letter + parallel CV/ATS; allow several LLM calls. */
+  lockDuration: 360_000,
+  stalledInterval: 60_000,
+})
 export class AiGenerationProcessor extends WorkerHost {
   private readonly logger = new Logger(AiGenerationProcessor.name);
 

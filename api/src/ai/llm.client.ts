@@ -26,8 +26,8 @@ type ChatCompletionResponse = {
   model?: string;
 };
 
-/** Keep under typical reverse-proxy idle limits so clients don't see Internal Server Error. */
-const LLM_TIMEOUT_MS = 45_000;
+/** Keep under reverse-proxy limits; override via LLM_TIMEOUT_MS for slow models. */
+const DEFAULT_LLM_TIMEOUT_MS = 120_000;
 const LLM_MAX_ATTEMPTS = 3;
 const LLM_RETRY_BASE_MS = 1_000;
 const LLM_RETRY_MAX_MS = 8_000;
@@ -67,6 +67,9 @@ export class LlmClient {
     const modelCandidates = getLlmModelCandidates(env);
     const useOpenRouterFallbacks =
       isOpenRouterKey(apiKey) && modelCandidates.length > 1;
+    const llmTimeoutMs =
+      this.config.get('LLM_TIMEOUT_MS', { infer: true }) ??
+      DEFAULT_LLM_TIMEOUT_MS;
     const started = Date.now();
 
     if (/r1|reason/i.test(model)) {
@@ -110,7 +113,7 @@ export class LlmClient {
         res = await fetch(`${baseUrl}/chat/completions`, {
           method: 'POST',
           headers,
-          signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
+          signal: AbortSignal.timeout(llmTimeoutMs),
           body: JSON.stringify(body),
         });
       } catch (error) {
@@ -122,7 +125,7 @@ export class LlmClient {
         if (timedOut) {
           throw new AppError(
             'AI_TIMEOUT',
-            `LLM timed out after ${LLM_TIMEOUT_MS / 1000}s (model=${model}). Use a fast chat model such as deepseek/deepseek-chat — not reasoning/r1.`,
+            `LLM timed out after ${llmTimeoutMs / 1000}s (model=${model}). Use a fast chat model such as deepseek/deepseek-chat — not reasoning/r1.`,
             504,
             { model, purpose, ms: Date.now() - started },
           );

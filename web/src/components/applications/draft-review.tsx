@@ -13,11 +13,13 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { apiFetch, ApiError } from "@/api/client";
 import {
   generationPollIntervalMs,
+  GENERATION_STUCK_UI_MS,
   isGeneratingStatus,
   type ApplicationResponse,
   type MeResponse,
 } from "@/api/types";
 import { ApplyPanel } from "@/components/applications/apply-panel";
+import { GenerationProgressBanner } from "@/components/app/generation-watch-provider";
 import { AtsReportPanel } from "@/components/applications/ats-report-panel";
 import { CoverLetterEditor } from "@/components/applications/cover-letter-editor";
 import { GenerateCta } from "@/components/applications/generate-cta";
@@ -42,60 +44,14 @@ import {
   applicationTitle,
   setHasApplicationsCookie,
 } from "@/lib/applications";
+import {
+  requestGenerationNotificationPermission,
+  unwatchGeneration,
+  watchGeneration,
+} from "@/lib/generation-watch";
 import { getAccessToken } from "@/lib/session";
 
 type DeskTab = "overview" | "letter" | "fit" | "cv" | "track";
-
-function GeneratingState({
-  status,
-  stuck,
-  onRetry,
-  retrying,
-  includeCv,
-}: {
-  status: string;
-  stuck: boolean;
-  onRetry: () => void;
-  retrying: boolean;
-  includeCv: boolean;
-}) {
-  return (
-    <PaperPanel className="border-guava-green/20 p-8 text-center md:p-12">
-      <span className="relative mx-auto flex size-3">
-        <span className="absolute inline-flex size-full animate-ping rounded-full bg-guava-pink/40" />
-        <span className="relative inline-flex size-3 rounded-full bg-guava-pink" />
-      </span>
-      <h2 className="mt-5 text-lg font-semibold tracking-tight">
-        {stuck ? "Still waiting on generation" : "Building your package"}
-      </h2>
-      <p className="mx-auto mt-2 max-w-[40ch] text-sm leading-relaxed text-muted-foreground">
-        {stuck
-          ? "This is taking longer than usual. The worker may have missed the job. Retry re-queues without using an extra credit while status is still pending."
-          : includeCv
-            ? "Cover letter, tailored CV, and fit report are generating from your profile and CV. This usually takes under a minute."
-            : "Cover letter and fit report are generating from your profile and CV. This usually takes under a minute."}
-      </p>
-      <p className="mt-4 font-mono text-xs uppercase tracking-wide text-muted-foreground">
-        {status}
-      </p>
-      {stuck ? (
-        <button
-          type="button"
-          onClick={onRetry}
-          disabled={retrying}
-          className="mt-6 inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
-        >
-          {retrying ? (
-            <CircleNotch className="size-4 animate-spin" weight="bold" />
-          ) : (
-            <ArrowClockwise className="size-4" weight="bold" />
-          )}
-          Retry generation
-        </button>
-      ) : null}
-    </PaperPanel>
-  );
-}
 
 function RegenerateConfirm({
   open,
@@ -395,11 +351,13 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
     trackedTerminal.current = key;
 
     if (app.generationStatus === "COMPLETED") {
+      unwatchGeneration(app.id);
       track(AnalyticsEvents.generate_completed, {
         applicationId: app.id,
         canonicalJobKey: app.canonicalJobKey,
       });
     } else {
+      unwatchGeneration(app.id);
       track(AnalyticsEvents.generate_failed, {
         applicationId: app.id,
         canonicalJobKey: app.canonicalJobKey,
@@ -487,6 +445,8 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
       setRegenOpen(false);
       trackedTerminal.current = null;
       setGeneratingSince(Date.now());
+      void requestGenerationNotificationPermission();
+      watchGeneration(data.id, applicationTitle(data));
       queryClient.setQueryData(["application", applicationId], data);
       track(AnalyticsEvents.generate_started, {
         applicationId: data.id,
@@ -520,9 +480,16 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
   // Matches worker: tailored CV only when pref on or actively selected GENERATED.
   const includeCvInPackage =
     autoGenerateCv || app?.cvChoice === "GENERATED";
-  const stuckMs = includeCvInPackage ? 120_000 : 90_000;
+  useEffect(() => {
+    if (!app || !generating) return;
+    void requestGenerationNotificationPermission();
+    watchGeneration(app.id, title);
+  }, [app?.id, generating, title]);
+
+  const stuckMs = GENERATION_STUCK_UI_MS;
   const stuckGenerating =
     generatingSince != null && now - generatingSince >= stuckMs;
+  const elapsedMs = generatingSince != null ? now - generatingSince : 0;
 
   useEffect(() => {
     if (!app) return;
@@ -576,22 +543,20 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
             ) : null}
           </div>
 
-          {/* Full-width JD — collapsed by default */}
-          {!generating ? (
-            <JobDescriptionPanel
-              app={app}
-              canRegenerate={canRegen}
-              onRequestRegenerate={() => setRegenOpen(true)}
-            />
-          ) : null}
+          <JobDescriptionPanel
+            app={app}
+            canRegenerate={canRegen && !generating}
+            onRequestRegenerate={() => setRegenOpen(true)}
+          />
 
           {generating ? (
-            <GeneratingState
+            <GenerationProgressBanner
               status={app.generationStatus ?? "PENDING"}
+              elapsedMs={elapsedMs}
+              includeCv={includeCvInPackage}
               stuck={stuckGenerating}
               retrying={regenMutation.isPending}
               onRetry={() => regenMutation.mutate()}
-              includeCv={includeCvInPackage}
             />
           ) : null}
 
@@ -625,8 +590,7 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
             </PaperPanel>
           ) : null}
 
-          {!generating ? (
-            <>
+          <>
               {isManual && app.canonicalJobKey ? (
                 <PaperPanel className="border-guava-pink/15 p-5 md:p-6">
                   <p className="text-sm font-medium text-foreground">
@@ -742,7 +706,7 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
 
                   <ApplyPanel app={app} />
 
-                  {canRegen ? (
+                  {canRegen && !generating ? (
                     <button
                       type="button"
                       onClick={() => setRegenOpen(true)}
@@ -764,8 +728,7 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
                   ) : null}
                 </aside>
               </div>
-            </>
-          ) : null}
+          </>
         </>
       ) : null}
 
