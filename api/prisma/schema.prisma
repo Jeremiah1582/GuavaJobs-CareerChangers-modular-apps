@@ -352,11 +352,15 @@ model ApplicationAtsReport {
   suggestions      Json     @default("[]")
   strengths        Json     @default("[]")
   gaps             Json     @default("[]")
+  /// Optional per-gap taxonomy: [{ text, kind: keyword|evidence|cert|domain|seniority }]
+  gapsDetailed     Json     @default("[]")
   actionableSteps  Json     @default("[]")
   /// Job titles the CV supports today (career-fit guidance when JD is a poor match).
   suggestedRoles   Json     @default("[]")
   /// One-sentence guidance grounded in suggestedRoles.
   careerSuggestion String?
+  /// 1–2 sentences explaining score/keyword movement after a refresh.
+  changeSummary    String?
   keywordCoverage  Json     @default("{}")
   icpMatch         Json     @default("{}")
   breakdown        Json     @default("{}")

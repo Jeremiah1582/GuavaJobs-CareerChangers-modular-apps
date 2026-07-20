@@ -33,6 +33,8 @@ import {
 import {
   addressGapSchema,
   AddressGapInput,
+  improveGapSchema,
+  ImproveGapInput,
 } from '../shared/schemas/career-cv.schema';
 import { AppError } from '../shared/schemas/error.schema';
 import { CareerCvService } from '../profiles/career-cv.service';
@@ -160,6 +162,19 @@ export class ApplicationsController {
     @Body(new ZodValidationPipe(addressGapSchema)) body: AddressGapInput,
   ) {
     return this.careerCv.addressGap(user.id, id, body);
+  }
+
+  @Post(':id/gaps/improve')
+  @ApiOperation({
+    summary:
+      'Improve a gap-fill draft with AI (facts only) — counts toward AI quota; Save remains free via gaps/address',
+  })
+  improveGap(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(improveGapSchema)) body: ImproveGapInput,
+  ) {
+    return this.careerCv.improveGap(user.id, id, body);
   }
 
   @Post(':id/generate-cv')

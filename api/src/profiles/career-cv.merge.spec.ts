@@ -1,4 +1,8 @@
-import { mergeEnrichmentIntoContent } from './career-cv.merge';
+import {
+  mergeEnrichmentIntoContent,
+  rebuildContentFromEnrichments,
+  removeEnrichmentFromContent,
+} from './career-cv.merge';
 import { emptyCareerCvContent } from '../shared/schemas/career-cv.schema';
 
 describe('career-cv.merge', () => {
@@ -78,5 +82,61 @@ describe('career-cv.merge', () => {
     expect(merged.work[0].highlights).toEqual([
       'Owned pager for payments API for 18 months',
     ]);
+  });
+
+  it('rebuilds master content from enrichments (edit path)', () => {
+    const enrichments = [
+      {
+        gapText: 'No Kubernetes',
+        answer: 'Ran K8s in production for 2 years',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        gapText: 'Missing React',
+        answer: 'React, TypeScript',
+        section: 'skills',
+        createdAt: '2026-01-02T00:00:00.000Z',
+      },
+    ];
+
+    const rebuilt = rebuildContentFromEnrichments(enrichments);
+
+    expect(rebuilt.work[0].highlights).toContain(
+      'Ran K8s in production for 2 years',
+    );
+    expect(rebuilt.skills.map((s) => s.name)).toEqual(
+      expect.arrayContaining(['React', 'TypeScript']),
+    );
+  });
+
+  it('removes a prior work highlight before re-merge on edit', () => {
+    const enrichment = {
+      gapText: 'No on-call',
+      answer: 'Owned pager for payments API for 18 months',
+    };
+    const withAnswer = mergeEnrichmentIntoContent(
+      emptyCareerCvContent(),
+      enrichment,
+    );
+    expect(withAnswer.work[0].highlights).toHaveLength(1);
+
+    const stripped = removeEnrichmentFromContent(withAnswer, enrichment);
+    expect(stripped.work).toHaveLength(0);
+  });
+
+  it('appends composed micro-form answer as a work highlight', () => {
+    const composed = [
+      'Role: Backend Intern',
+      'Dates: 2021–2022',
+      'Details: Ran production K8s clusters for 2 years at Acme',
+      'Outcome: Faster incident recovery',
+    ].join('\n');
+
+    const merged = mergeEnrichmentIntoContent(emptyCareerCvContent(), {
+      gapText: 'Limited Kubernetes experience',
+      answer: composed,
+    });
+
+    expect(merged.work[0].highlights).toContain(composed);
   });
 });

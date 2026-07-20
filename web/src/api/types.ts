@@ -148,11 +148,18 @@ export type ApplicationAtsReport = {
   suggestions: string[];
   strengths: string[];
   gaps: string[];
+  /** Optional taxonomy for UX routing; gaps remains the compat list. */
+  gapsDetailed?: Array<{
+    text: string;
+    kind: "keyword" | "evidence" | "cert" | "domain" | "seniority";
+  }>;
   actionableSteps: string[];
   /** Roles the CV supports today — useful when this JD is a poor fit. */
   suggestedRoles?: string[];
   /** One-sentence career guidance grounded in suggestedRoles. */
   careerSuggestion?: string | null;
+  /** 1–2 sentences on how fit moved after a refresh. */
+  changeSummary?: string | null;
   keywordCoverage: Record<string, number>;
   icpMatch: Record<string, unknown>;
   breakdown: Record<string, number>;
@@ -166,6 +173,27 @@ export type AddressApplicationGapBody = {
   gapText: string;
   answer: string;
   section?: string;
+};
+
+/** POST /applications/:id/gaps/improve — facts-only polish of a micro-form draft (AI quota). */
+export type ImproveApplicationGapBody = {
+  gapText: string;
+  /** Composed micro-form text (Role / Dates / Details / Outcome). */
+  draft: string;
+  missingKeywords?: string[];
+};
+
+export type ImproveApplicationGapResponse = {
+  improvedAnswer: string;
+  factsUsed: string[];
+  warnings?: string[];
+};
+
+export type CareerGapEnrichment = {
+  gapText: string;
+  answer: string;
+  section?: string;
+  createdAt: string;
 };
 
 export type ApplicationStatus =
@@ -283,6 +311,8 @@ export type ApplicationResponse = {
   generatedCvExport?: GeneratedCvExport | null;
   appliedAt?: string | null;
   atsReport: ApplicationAtsReport | null;
+  /** Saved gap-fill answers on the profile master career corpus. */
+  careerEnrichments?: CareerGapEnrichment[];
   events?: ApplicationEvent[];
   createdAt: string;
   updatedAt: string;

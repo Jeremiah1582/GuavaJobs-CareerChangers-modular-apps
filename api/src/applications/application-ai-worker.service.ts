@@ -10,6 +10,7 @@ import { GeneratedCvGenerator } from '../ai/generated-cv.generator';
 import { JobFactsParser } from '../ai/job-facts.parser';
 import { JobsService } from '../jobs/jobs.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { careerCvEnrichmentsSchema } from '../shared/schemas/career-cv.schema';
 import { preferencesFromMetadata } from '../shared/schemas/user.schema';
 import { UsageService } from '../users/usage.service';
 import { AiGenerationJobData } from '../queue/queue.constants';
@@ -176,9 +177,20 @@ export class ApplicationAiWorkerService {
     const facts = this.jobFacts.parseFromJob(jobData);
     const careerRow = await this.prisma.profileCareerCv.findUnique({
       where: { profileId: app.profileId },
-      select: { content: true },
+      select: { content: true, enrichments: true },
     });
     const careerContent = serializeCareerContent(careerRow?.content);
+    const careerEnrichments = parseCareerEnrichmentsForAts(
+      careerRow?.enrichments,
+    );
+    const profileMeta = await this.prisma.profile.findUnique({
+      where: { id: app.profileId },
+      select: { primaryIndustry: true, seniority: true },
+    });
+    const previousAts = await this.prisma.applicationAtsReport.findUnique({
+      where: { applicationId: app.id },
+      select: { score: true, missingKeywords: true, gaps: true },
+    });
     const cvText = resolveCvTextForGeneration({
       cvSnapshot: bundle.cvSnapshot,
       careerCvContent: careerRow?.content,
@@ -222,6 +234,16 @@ export class ApplicationAiWorkerService {
       jobDescription,
       coverLetter: coverLetter.coverLetter,
       cvText,
+      careerEnrichments,
+      primaryIndustry: profileMeta?.primaryIndustry,
+      seniority: profileMeta?.seniority,
+      previousReport: previousAts
+        ? {
+            score: previousAts.score,
+            missingKeywords: jsonStringArray(previousAts.missingKeywords),
+            gaps: jsonStringArray(previousAts.gaps),
+          }
+        : null,
     });
 
     const [generatedCv, ats] = await this.withProcessingHeartbeat(
@@ -297,9 +319,11 @@ export class ApplicationAiWorkerService {
           suggestions: ats.suggestions,
           strengths: ats.strengths,
           gaps: ats.gaps,
+          gapsDetailed: ats.gapsDetailed as Prisma.InputJsonValue,
           actionableSteps: ats.actionableSteps,
           suggestedRoles: ats.suggestedRoles,
           careerSuggestion: ats.careerSuggestion || null,
+          changeSummary: ats.changeSummary ?? null,
           keywordCoverage: ats.keywordCoverage,
           icpMatch: ats.icpMatch as Prisma.InputJsonValue,
           breakdown: ats.breakdown,
@@ -314,9 +338,11 @@ export class ApplicationAiWorkerService {
           suggestions: ats.suggestions,
           strengths: ats.strengths,
           gaps: ats.gaps,
+          gapsDetailed: ats.gapsDetailed as Prisma.InputJsonValue,
           actionableSteps: ats.actionableSteps,
           suggestedRoles: ats.suggestedRoles,
           careerSuggestion: ats.careerSuggestion || null,
+          changeSummary: ats.changeSummary ?? null,
           keywordCoverage: ats.keywordCoverage,
           icpMatch: ats.icpMatch as Prisma.InputJsonValue,
           breakdown: ats.breakdown,
@@ -532,12 +558,29 @@ export class ApplicationAiWorkerService {
 
     const cvText = resolveCvTextForAts(app);
     const careerContent = serializeCareerContent(app.profile?.careerCv?.content);
+    const careerEnrichments = parseCareerEnrichmentsForAts(
+      app.profile?.careerCv?.enrichments,
+    );
+    const previousAts = await this.prisma.applicationAtsReport.findUnique({
+      where: { applicationId: app.id },
+      select: { score: true, missingKeywords: true, gaps: true },
+    });
     const ats = await this.atsReportGen.generate({
       jobTitle: app.jobRoleTitle ?? 'Role',
       companyName: app.companyName ?? 'Company',
       jobDescription: jd,
       coverLetter: app.coverLetterContent,
       cvText,
+      careerEnrichments,
+      primaryIndustry: app.profile?.primaryIndustry,
+      seniority: app.profile?.seniority,
+      previousReport: previousAts
+        ? {
+            score: previousAts.score,
+            missingKeywords: jsonStringArray(previousAts.missingKeywords),
+            gaps: jsonStringArray(previousAts.gaps),
+          }
+        : null,
     });
 
     const atsFingerprint = buildApplicationAtsFingerprint({
@@ -564,9 +607,11 @@ export class ApplicationAiWorkerService {
           suggestions: ats.suggestions,
           strengths: ats.strengths,
           gaps: ats.gaps,
+          gapsDetailed: ats.gapsDetailed as Prisma.InputJsonValue,
           actionableSteps: ats.actionableSteps,
           suggestedRoles: ats.suggestedRoles,
           careerSuggestion: ats.careerSuggestion || null,
+          changeSummary: ats.changeSummary ?? null,
           keywordCoverage: ats.keywordCoverage,
           icpMatch: ats.icpMatch as Prisma.InputJsonValue,
           breakdown: ats.breakdown,
@@ -581,9 +626,11 @@ export class ApplicationAiWorkerService {
           suggestions: ats.suggestions,
           strengths: ats.strengths,
           gaps: ats.gaps,
+          gapsDetailed: ats.gapsDetailed as Prisma.InputJsonValue,
           actionableSteps: ats.actionableSteps,
           suggestedRoles: ats.suggestedRoles,
           careerSuggestion: ats.careerSuggestion || null,
+          changeSummary: ats.changeSummary ?? null,
           keywordCoverage: ats.keywordCoverage,
           icpMatch: ats.icpMatch as Prisma.InputJsonValue,
           breakdown: ats.breakdown,
@@ -676,4 +723,20 @@ export class ApplicationAiWorkerService {
 function jsonField(json: unknown, key: string): unknown {
   if (!json || typeof json !== 'object' || Array.isArray(json)) return null;
   return (json as Record<string, unknown>)[key];
+}
+
+function jsonStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((v): v is string => typeof v === 'string');
+}
+
+function parseCareerEnrichmentsForAts(
+  raw: unknown,
+): Array<{ gapText: string; answer: string }> {
+  const parsed = careerCvEnrichmentsSchema.safeParse(raw ?? []);
+  if (!parsed.success) return [];
+  return parsed.data.map((e) => ({
+    gapText: e.gapText,
+    answer: e.answer,
+  }));
 }

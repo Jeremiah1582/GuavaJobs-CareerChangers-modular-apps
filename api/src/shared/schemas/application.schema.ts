@@ -6,6 +6,7 @@ import {
   hydratedGeneratedCvExportSchema,
   storedGeneratedCvContentSchema,
 } from './generated-cv.schema';
+import { careerCvEnrichmentSchema } from './career-cv.schema';
 
 export const applicationStatusSchema = z.enum([
   'DRAFT',
@@ -41,11 +42,23 @@ export const applicationAtsReportSchema = z.object({
   suggestions: z.array(z.string()),
   strengths: z.array(z.string()),
   gaps: z.array(z.string()),
+  /** Optional taxonomy for UX routing; gaps remains the compat list. */
+  gapsDetailed: z
+    .array(
+      z.object({
+        text: z.string(),
+        kind: z.enum(['keyword', 'evidence', 'cert', 'domain', 'seniority']),
+      }),
+    )
+    .optional()
+    .default([]),
   actionableSteps: z.array(z.string()),
   /** Roles the CV supports today — useful when this JD is a poor fit. */
   suggestedRoles: z.array(z.string()).optional().default([]),
   /** One-sentence career guidance grounded in suggestedRoles. */
   careerSuggestion: z.string().nullable().optional(),
+  /** 1–2 sentences on how fit moved after refresh (nullable on first run). */
+  changeSummary: z.string().nullable().optional(),
   keywordCoverage: z.record(z.number()),
   icpMatch: z.record(z.unknown()),
   breakdown: z.record(z.number()),
@@ -108,6 +121,8 @@ export const applicationResponseSchema = z.object({
   generatedCvExport: hydratedGeneratedCvExportSchema.nullable().optional(),
   appliedAt: z.string().datetime().nullable(),
   atsReport: applicationAtsReportSchema.nullable(),
+  /** Gap-fill answers saved on the profile master career corpus (for Fit panel edit). */
+  careerEnrichments: z.array(careerCvEnrichmentSchema).optional().default([]),
   events: z.array(applicationEventSummarySchema).optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),

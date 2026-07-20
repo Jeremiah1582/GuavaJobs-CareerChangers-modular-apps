@@ -9,14 +9,49 @@ export type AtsScoreCalibrateInput = {
   keywordCoverage: Record<string, number>;
 };
 
+export type AtsScoreCalibrateOpts = {
+  coverLetterLength?: number;
+  /** Gap texts the candidate addressed with a non-trivial enrichment answer. */
+  addressedGapTexts?: string[];
+};
+
+const ADDRESSED_ANSWER_WORD_MIN = 10;
+
+/** True when enrichment answer is substantial enough to count as addressed. */
+export function isNonTrivialEnrichmentAnswer(answer: string): boolean {
+  const trimmed = answer.trim();
+  if (!trimmed) return false;
+  return trimmed.split(/\s+/).filter(Boolean).length >= ADDRESSED_ANSWER_WORD_MIN;
+}
+
+/** Drop gaps whose text matches an addressed enrichment (exact or loose contains). */
+export function excludeAddressedGaps(
+  gaps: string[],
+  addressedGapTexts: string[],
+): string[] {
+  if (addressedGapTexts.length === 0) return gaps;
+  const keys = addressedGapTexts
+    .map((g) => g.trim().toLowerCase())
+    .filter(Boolean);
+  return gaps.filter((gap) => {
+    const gl = gap.trim().toLowerCase();
+    return !keys.some(
+      (a) => gl === a || gl.includes(a) || a.includes(gl),
+    );
+  });
+}
+
 /** Narrative signals that imply poor JD fit — used to cap inflated LLM scores. */
 export function estimateFitSeverity(
   input: Pick<
     AtsScoreCalibrateInput,
     'missingKeywords' | 'gaps' | 'strengths' | 'keywordCoverage'
   >,
+  opts?: { addressedGapTexts?: string[] },
 ): number {
-  const { missingKeywords, gaps, strengths, keywordCoverage } = input;
+  const addressed = opts?.addressedGapTexts ?? [];
+  const gaps = excludeAddressedGaps(input.gaps, addressed);
+  const { missingKeywords, strengths, keywordCoverage } = input;
   let severity = 0;
 
   const missing = missingKeywords.length;
@@ -35,6 +70,8 @@ export function estimateFitSeverity(
     /\b(no experience|no relevant|wrong field|unrelated|does not match|doesn't match|not a fit|lack(?:s|ing)? (?:any )?(?:relevant |required )?(?:experience|background|qualification)|career change|different (?:industry|field|domain))\b/.test(
       gapText,
     );
+  // Keep hard domain-mismatch signal even if some gaps were addressed —
+  // only skip when every harsh gap was addressed away.
   if (domainMismatch) severity += 0.25;
 
   if (strengths.length === 0) severity += 0.12;
@@ -62,9 +99,11 @@ function clampScore(n: number): number {
  */
 export function calibrateAtsScores<T extends AtsScoreCalibrateInput>(
   raw: T,
-  opts?: { coverLetterLength?: number },
+  opts?: AtsScoreCalibrateOpts,
 ): T {
-  const severity = estimateFitSeverity(raw);
+  const severity = estimateFitSeverity(raw, {
+    addressedGapTexts: opts?.addressedGapTexts,
+  });
 
   // Severe narrative → hard caps (software CV vs plumbing JD should land ~0–30).
   const maxOverall = clampScore(100 - severity * 85);
@@ -118,4 +157,60 @@ export function calibrateAtsScores<T extends AtsScoreCalibrateInput>(
     cvScore,
     letterScore,
   };
+}
+
+export type AtsScoreSnapshot = {
+  score: number;
+  missingKeywords: string[];
+  gaps: string[];
+};
+
+/** 1–2 sentence summary of how fit moved after a refresh. */
+export function buildAtsChangeSummary(
+  previous: AtsScoreSnapshot | null | undefined,
+  next: AtsScoreSnapshot,
+): string | null {
+  if (!previous) return null;
+  const parts: string[] = [];
+  const delta = next.score - previous.score;
+  if (delta !== 0) {
+    const verb = delta > 0 ? 'rose' : 'fell';
+    parts.push(
+      `Overall fit ${verb} by ${Math.abs(delta)} (${previous.score} → ${next.score}).`,
+    );
+  } else {
+    parts.push(`Overall fit stayed at ${next.score}.`);
+  }
+
+  const prevMissing = new Set(
+    previous.missingKeywords.map((k) => k.toLowerCase()),
+  );
+  const nextMissing = new Set(next.missingKeywords.map((k) => k.toLowerCase()));
+  const covered = previous.missingKeywords.filter(
+    (k) => !nextMissing.has(k.toLowerCase()),
+  );
+  if (covered.length > 0) {
+    parts.push(
+      `Covered ${covered.length} keyword${covered.length === 1 ? '' : 's'}: ${covered.slice(0, 3).join(', ')}${covered.length > 3 ? '…' : ''}.`,
+    );
+  }
+  const stillMissing = next.missingKeywords.filter(
+    (k) => !prevMissing.has(k.toLowerCase()) || nextMissing.has(k.toLowerCase()),
+  );
+  // Prefer still-open keywords from the new report
+  if (next.missingKeywords.length > 0 && covered.length === 0) {
+    parts.push(
+      `Still missing: ${next.missingKeywords.slice(0, 3).join(', ')}${next.missingKeywords.length > 3 ? '…' : ''}.`,
+    );
+  } else if (
+    next.missingKeywords.length > 0 &&
+    parts.length < 2 &&
+    stillMissing.length > 0
+  ) {
+    parts.push(
+      `Still open: ${next.missingKeywords.slice(0, 3).join(', ')}.`,
+    );
+  }
+
+  return parts.slice(0, 2).join(' ');
 }

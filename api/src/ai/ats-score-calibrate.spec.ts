@@ -1,4 +1,5 @@
 import {
+  buildAtsChangeSummary,
   calibrateAtsScores,
   estimateFitSeverity,
 } from './ats-score-calibrate';
@@ -50,6 +51,38 @@ describe('estimateFitSeverity', () => {
       },
     });
     expect(severity).toBeLessThan(0.35);
+  });
+
+  it('down-weights gaps that were addressed with non-trivial enrichments', () => {
+    const without = estimateFitSeverity({
+      missingKeywords: ['kubernetes', 'helm'],
+      gaps: [
+        'Limited Kubernetes experience',
+        'No Helm chart ownership',
+        'Missing production container evidence',
+      ],
+      strengths: ['TypeScript'],
+      keywordCoverage: { kubernetes: 10, helm: 5 },
+    });
+    const withAddressed = estimateFitSeverity(
+      {
+        missingKeywords: ['kubernetes', 'helm'],
+        gaps: [
+          'Limited Kubernetes experience',
+          'No Helm chart ownership',
+          'Missing production container evidence',
+        ],
+        strengths: ['TypeScript'],
+        keywordCoverage: { kubernetes: 10, helm: 5 },
+      },
+      {
+        addressedGapTexts: [
+          'Limited Kubernetes experience',
+          'No Helm chart ownership',
+        ],
+      },
+    );
+    expect(withAddressed).toBeLessThan(without);
   });
 });
 
@@ -112,5 +145,59 @@ describe('calibrateAtsScores', () => {
     expect(calibrated.score).toBeGreaterThanOrEqual(75);
     expect(calibrated.cvScore).toBeGreaterThanOrEqual(75);
     expect(calibrated.letterScore).toBeGreaterThanOrEqual(75);
+  });
+
+  it('does not crush scores when prior gaps are addressed with real answers', () => {
+    const calibrated = calibrateAtsScores(
+      {
+        score: 72,
+        letterScore: 74,
+        cvScore: 70,
+        missingKeywords: ['graphql'],
+        gaps: ['Limited GraphQL depth'],
+        strengths: ['TypeScript APIs', 'Kubernetes ops'],
+        keywordCoverage: {
+          typescript: 90,
+          kubernetes: 80,
+          graphql: 55,
+        },
+        suggestions: [],
+        actionableSteps: [],
+      },
+      {
+        coverLetterLength: 600,
+        addressedGapTexts: ['Limited Kubernetes experience'],
+      },
+    );
+    expect(calibrated.score).toBeGreaterThanOrEqual(65);
+  });
+});
+
+describe('buildAtsChangeSummary', () => {
+  it('summarizes score delta and covered keywords', () => {
+    const summary = buildAtsChangeSummary(
+      {
+        score: 55,
+        missingKeywords: ['kubernetes', 'helm', 'graphql'],
+        gaps: ['Limited Kubernetes'],
+      },
+      {
+        score: 68,
+        missingKeywords: ['graphql'],
+        gaps: ['Limited GraphQL depth'],
+      },
+    );
+    expect(summary).toMatch(/rose by 13/);
+    expect(summary).toMatch(/Covered 2 keywords/i);
+  });
+
+  it('returns null without a previous report', () => {
+    expect(
+      buildAtsChangeSummary(null, {
+        score: 70,
+        missingKeywords: [],
+        gaps: [],
+      }),
+    ).toBeNull();
   });
 });

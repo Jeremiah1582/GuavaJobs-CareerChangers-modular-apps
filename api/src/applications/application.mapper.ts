@@ -13,6 +13,7 @@ import {
   generatedCvStoredContentSchema,
   hydrateGeneratedCvContent,
 } from '../shared/schemas/generated-cv.schema';
+import { careerCvEnrichmentsSchema } from '../shared/schemas/career-cv.schema';
 import {
   buildApplicationAtsFingerprint,
   resolveCvTextForAts,
@@ -28,7 +29,7 @@ type ApplicationWithRelations = Application & {
   profile?:
     | (Profile & {
         currentCv?: { parsedText: string | null } | null;
-        careerCv?: { content: unknown } | null;
+        careerCv?: { content: unknown; enrichments?: unknown } | null;
       })
     | null;
 };
@@ -122,6 +123,7 @@ export function toApplicationResponse(
           createdAt: e.createdAt.toISOString(),
         }))
       : undefined,
+    careerEnrichments: parseCareerEnrichments(app.profile?.careerCv?.enrichments),
     createdAt: app.createdAt.toISOString(),
     updatedAt: app.updatedAt.toISOString(),
   };
@@ -210,15 +212,65 @@ function toAtsReportResponse(report: ApplicationAtsReport, stale: boolean) {
     suggestions: jsonStringArray(report.suggestions),
     strengths: jsonStringArray(report.strengths),
     gaps: jsonStringArray(report.gaps),
+    gapsDetailed: jsonGapsDetailed(report.gapsDetailed),
     actionableSteps: jsonStringArray(report.actionableSteps),
     suggestedRoles: jsonStringArray(report.suggestedRoles),
     careerSuggestion: report.careerSuggestion ?? null,
+    changeSummary: report.changeSummary ?? null,
     keywordCoverage: jsonNumberRecord(report.keywordCoverage),
     icpMatch: jsonRecord(report.icpMatch) ?? {},
     breakdown: jsonNumberRecord(report.breakdown),
     assessedAt: report.assessedAt.toISOString(),
     stale,
   };
+}
+
+function jsonGapsDetailed(
+  value: unknown,
+): Array<{
+  text: string;
+  kind: 'keyword' | 'evidence' | 'cert' | 'domain' | 'seniority';
+}> {
+  if (!Array.isArray(value)) return [];
+  const kinds = new Set([
+    'keyword',
+    'evidence',
+    'cert',
+    'domain',
+    'seniority',
+  ]);
+  const out: Array<{
+    text: string;
+    kind: 'keyword' | 'evidence' | 'cert' | 'domain' | 'seniority';
+  }> = [];
+  for (const item of value) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const rec = item as Record<string, unknown>;
+    if (typeof rec.text !== 'string' || !rec.text.trim()) continue;
+    const kind = typeof rec.kind === 'string' ? rec.kind : '';
+    if (!kinds.has(kind)) continue;
+    out.push({
+      text: rec.text,
+      kind: kind as
+        | 'keyword'
+        | 'evidence'
+        | 'cert'
+        | 'domain'
+        | 'seniority',
+    });
+  }
+  return out;
+}
+
+function parseCareerEnrichments(raw: unknown) {
+  const parsed = careerCvEnrichmentsSchema.safeParse(raw ?? []);
+  if (!parsed.success) return [];
+  return parsed.data.map((e) => ({
+    gapText: e.gapText,
+    answer: e.answer,
+    section: e.section,
+    createdAt: e.createdAt,
+  }));
 }
 
 function jsonRecord(value: unknown): Record<string, unknown> | null {

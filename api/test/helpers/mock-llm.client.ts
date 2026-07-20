@@ -10,6 +10,19 @@ export class MockLlmClient {
       });
     }
 
+    if (/polish gap-fill answers/i.test(systemPrompt)) {
+      return JSON.stringify({
+        improvedAnswer:
+          'Built REST APIs in Node.js and wrote integration tests, reducing flaky deploys by tracking failures.',
+        factsUsed: [
+          'REST APIs',
+          'Node.js',
+          'integration tests',
+          'flaky deploys',
+        ],
+      });
+    }
+
     if (/write ATS-aligned, job-tailored CV/i.test(systemPrompt)) {
       return JSON.stringify({
         label: 'Software Engineer',

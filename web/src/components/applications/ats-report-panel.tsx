@@ -1,17 +1,34 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, CircleNotch, Plus, WarningCircle, X } from "@phosphor-icons/react";
-import { useEffect, useState } from "react";
+import {
+  Check,
+  CircleNotch,
+  MagicWand,
+  PencilSimple,
+  Plus,
+  WarningCircle,
+  X,
+} from "@phosphor-icons/react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, ApiError } from "@/api/client";
 import type {
   AddressApplicationGapBody,
   ApplicationAtsReport,
   ApplicationResponse,
+  CareerGapEnrichment,
+  ImproveApplicationGapBody,
+  ImproveApplicationGapResponse,
 } from "@/api/types";
 import { PaperPanel, paperInputClass } from "@/components/ui/paper-panel";
 import { ATS_GOOD_SCORE_MIN } from "@/lib/applications";
 import { AnalyticsEvents, track } from "@/lib/analytics";
+import {
+  IMPROVE_WORD_MIN,
+  composeGapAnswer,
+  countWords,
+  parseGapAnswer,
+} from "@/lib/gap-answer";
 import { getAccessToken } from "@/lib/session";
 
 const CAREER_SECTIONS = [
@@ -24,6 +41,15 @@ const CAREER_SECTIONS = [
   { value: "awards", label: "Awards" },
   { value: "languages", label: "Languages" },
 ] as const;
+
+const WRITING_TIPS = [
+  "Name the place, role, or project",
+  "Say what you did (use action verbs)",
+  "Mention tools only if you used them",
+  "Add a number or outcome if you have one",
+] as const;
+
+type HonestyChoice = "yes" | "no" | null;
 
 function ScoreRing({ score, label }: { score: number; label: string }) {
   const tone =
@@ -69,51 +95,161 @@ function BulletList({
 }
 
 function GapItem({
+  applicationId,
   gapText,
-  addressed,
+  gapKind,
+  saved,
   saving,
   error,
+  suggestedRoles,
+  missingKeywords,
   onSave,
 }: {
+  applicationId: string;
   gapText: string;
-  addressed: boolean;
+  gapKind?: "keyword" | "evidence" | "cert" | "domain" | "seniority";
+  saved?: CareerGapEnrichment;
   saving: boolean;
   error: string | null;
+  suggestedRoles: string[];
+  missingKeywords: string[];
   onSave: (body: AddressApplicationGapBody) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const [answer, setAnswer] = useState("");
+  const [honesty, setHonesty] = useState<HonestyChoice>(
+    gapKind === "domain" && !saved ? "no" : null,
+  );
+  const [role, setRole] = useState("");
+  const [dates, setDates] = useState("");
+  const [details, setDetails] = useState("");
+  const [outcome, setOutcome] = useState("");
   const [section, setSection] = useState("");
+  const [polished, setPolished] = useState<string | null>(null);
+  const [polishedEdit, setPolishedEdit] = useState("");
+  const [usingPolished, setUsingPolished] = useState(false);
+  const [improveError, setImproveError] = useState<string | null>(null);
+  const [improveWarnings, setImproveWarnings] = useState<string[]>([]);
+  const addressed = !!saved;
+  const wasSaving = useRef(false);
+  const queryClient = useQueryClient();
+
+  const detailsWordCount = countWords(details);
+  const canImprove = detailsWordCount >= IMPROVE_WORD_MIN;
+  const canSave =
+    honesty === "yes" &&
+    role.trim().length > 0 &&
+    details.trim().length > 0;
+
+  useEffect(() => {
+    if (!expanded) return;
+    const parsed = parseGapAnswer(saved?.answer ?? "");
+    setRole(parsed.role);
+    setDates(parsed.dates);
+    setDetails(parsed.details);
+    setOutcome(parsed.outcome);
+    setSection(saved?.section ?? "");
+    setHonesty(saved ? "yes" : gapKind === "domain" ? "no" : null);
+    setPolished(null);
+    setPolishedEdit("");
+    setUsingPolished(false);
+    setImproveError(null);
+    setImproveWarnings([]);
+  }, [expanded, saved?.answer, saved?.section, saved, gapKind]);
+
+  useEffect(() => {
+    if (wasSaving.current && !saving && !error) {
+      setExpanded(false);
+    }
+    wasSaving.current = saving;
+  }, [saving, error]);
+
+  const improveMutation = useMutation({
+    mutationFn: async (body: ImproveApplicationGapBody) => {
+      const token = await getAccessToken();
+      return apiFetch<ImproveApplicationGapResponse>(
+        `/applications/${applicationId}/gaps/improve`,
+        {
+          method: "POST",
+          token,
+          body: JSON.stringify(body),
+        },
+      );
+    },
+    onMutate: () => {
+      setImproveError(null);
+      setImproveWarnings([]);
+    },
+    onSuccess: (data) => {
+      setPolished(data.improvedAnswer);
+      setPolishedEdit(data.improvedAnswer);
+      setUsingPolished(false);
+      setImproveWarnings(data.warnings ?? []);
+      void queryClient.invalidateQueries({ queryKey: ["me"] });
+    },
+    onError: (err) => {
+      setImproveError(
+        err instanceof ApiError
+          ? err.message
+          : "Could not improve this draft.",
+      );
+    },
+  });
 
   function cancel() {
     setExpanded(false);
-    setAnswer("");
-    setSection("");
   }
 
   function submit() {
-    const trimmed = answer.trim();
-    if (!trimmed) return;
+    if (!canSave) return;
+    let answer: string;
+    if (usingPolished && polishedEdit.trim()) {
+      answer = polishedEdit.trim();
+    } else {
+      answer = composeGapAnswer({ role, dates, details, outcome });
+    }
+    if (!answer.trim()) return;
     onSave({
       gapText,
-      answer: trimmed,
+      answer: answer.trim(),
       ...(section ? { section } : {}),
     });
   }
+
+  function requestImprove() {
+    if (!canImprove || !role.trim()) return;
+    const draft = composeGapAnswer({ role, dates, details, outcome });
+    improveMutation.mutate({
+      gapText,
+      draft,
+      ...(missingKeywords.length > 0 ? { missingKeywords } : {}),
+    });
+  }
+
+  const busy = saving || improveMutation.isPending;
 
   return (
     <li className="list-item">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <span className="min-w-0 flex-1 leading-relaxed">{gapText}</span>
         {addressed ? (
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-guava-green/30 bg-guava-green/10 px-2 py-1 text-xs font-medium text-guava-green">
-            <Check className="size-3.5" weight="bold" />
-            Addressed
-          </span>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => setExpanded((v) => !v)}
+            title="Edit your saved experience for this gap"
+            className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-guava-green/30 bg-guava-green/10 px-2 py-1 text-xs font-medium text-guava-green transition-colors hover:border-guava-green/50 hover:bg-guava-green/15 active:scale-[0.98] disabled:opacity-50"
+          >
+            {expanded ? (
+              <PencilSimple className="size-3.5" weight="bold" />
+            ) : (
+              <Check className="size-3.5" weight="bold" />
+            )}
+            {expanded ? "Editing" : "Addressed"}
+          </button>
         ) : (
           <button
             type="button"
-            disabled={saving}
+            disabled={busy}
             onClick={() => setExpanded((v) => !v)}
             className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-guava-green/25 bg-white px-2 py-1 text-xs font-medium transition-colors hover:border-guava-green/45 active:scale-[0.98] disabled:opacity-50"
           >
@@ -123,72 +259,352 @@ function GapItem({
         )}
       </div>
 
-      {expanded && !addressed ? (
+      {expanded ? (
         <div className="mt-2 space-y-2.5 rounded-xl border border-guava-green/15 bg-guava-green/[0.03] p-3">
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            Add only facts you can back up — role, employer, dates, and what you
-            did. We save this to your career profile for future applications.
-          </p>
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium">Details</span>
-            <textarea
-              value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
-              rows={3}
-              disabled={saving}
-              className={`${paperInputClass} min-h-[4.5rem] resize-y text-sm leading-relaxed`}
-              placeholder="e.g. Led weekly standups for a 6-person team at Acme, 2021–2023…"
-              autoFocus
-            />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium">
-              Section{" "}
-              <span className="font-normal text-muted-foreground">(optional)</span>
-            </span>
-            <select
-              value={section}
-              onChange={(e) => setSection(e.target.value)}
-              disabled={saving}
-              className={`${paperInputClass} text-sm`}
-            >
-              <option value="">Not sure</option>
-              {CAREER_SECTIONS.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
+          {/* Writing tips — always visible when expanded */}
+          <div className="rounded-lg border border-guava-green/10 bg-white/60 px-2.5 py-2">
+            <p className="text-xs font-medium text-foreground">Writing tips</p>
+            <ul className="mt-1.5 list-disc space-y-0.5 pl-4 text-xs leading-relaxed text-muted-foreground">
+              {WRITING_TIPS.map((tip) => (
+                <li key={tip}>{tip}</li>
               ))}
-            </select>
-          </label>
-          {error ? (
-            <p className="text-sm text-destructive" role="alert">
-              {error}
+            </ul>
+          </div>
+
+          {/* Honesty gate */}
+          <div>
+            <p className="text-xs font-medium leading-relaxed text-foreground">
+              Do you have real experience related to this (job, project,
+              coursework, or volunteer)?
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setHonesty("yes");
+                  setImproveError(null);
+                }}
+                className={`inline-flex items-center rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors active:scale-[0.98] disabled:opacity-50 ${
+                  honesty === "yes"
+                    ? "border-guava-green/40 bg-guava-green/15 text-guava-green"
+                    : "border-guava-green/25 bg-white hover:border-guava-green/45"
+                }`}
+              >
+                Yes
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setHonesty("no");
+                  setPolished(null);
+                  setUsingPolished(false);
+                  setImproveError(null);
+                  setImproveWarnings([]);
+                }}
+                className={`inline-flex items-center rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors active:scale-[0.98] disabled:opacity-50 ${
+                  honesty === "no"
+                    ? "border-guava-pink/40 bg-guava-pink/10 text-guava-pink"
+                    : "border-guava-green/25 bg-white hover:border-guava-green/45"
+                }`}
+              >
+                No
+              </button>
+            </div>
+          </div>
+
+          {honesty === "no" ? (
+            <div className="space-y-2 text-xs leading-relaxed text-muted-foreground">
+              <p>
+                Don&apos;t fabricate experience for this gap — honesty keeps
+                interviews and ATS scores grounded in what you can defend.
+              </p>
+              {suggestedRoles.length > 0 ? (
+                <p>
+                  Consider roles that fit your CV today:{" "}
+                  <span className="font-medium text-foreground">
+                    {formatRoleList(suggestedRoles)}
+                  </span>
+                  . You can still frame transferable skills on a different gap
+                  if you have real evidence.
+                </p>
+              ) : (
+                <p>
+                  Look at &ldquo;Where your CV fits best&rdquo; above for roles
+                  that match what you already have.
+                </p>
+              )}
+              <button
+                type="button"
+                disabled={busy}
+                onClick={cancel}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-guava-green/25 bg-white px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+              >
+                <X className="size-3.5" weight="bold" />
+                Close
+              </button>
+            </div>
+          ) : null}
+
+          {honesty === "yes" && gapKind === "cert" ? (
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Only add a certification you hold or are actively pursuing — never
+              invent credentials. Prefer status like &ldquo;in progress&rdquo;
+              with a real program name.
             </p>
           ) : null}
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              disabled={saving || !answer.trim()}
-              onClick={submit}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-50 active:scale-[0.98]"
-            >
-              {saving ? (
-                <CircleNotch className="size-3.5 animate-spin" weight="bold" />
+
+          {honesty === "yes" ? (
+            <>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {addressed
+                  ? "Update the facts you saved — we will replace your previous answer on your career profile."
+                  : "Add only facts you can back up. We save this to your career profile for future applications. Improve with AI is optional polish and uses your AI quota."}
+              </p>
+
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium">
+                  Role / project{" "}
+                  <span className="font-normal text-muted-foreground">
+                    (required)
+                  </span>
+                </span>
+                <input
+                  type="text"
+                  value={role}
+                  onChange={(e) => {
+                    setRole(e.target.value);
+                    setUsingPolished(false);
+                  }}
+                  disabled={busy}
+                  className={`${paperInputClass} text-sm`}
+                  placeholder="e.g. Frontend intern at Acme, or Capstone dashboard"
+                  autoFocus
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium">
+                  Dates{" "}
+                  <span className="font-normal text-muted-foreground">
+                    (optional)
+                  </span>
+                </span>
+                <input
+                  type="text"
+                  value={dates}
+                  onChange={(e) => {
+                    setDates(e.target.value);
+                    setUsingPolished(false);
+                  }}
+                  disabled={busy}
+                  className={`${paperInputClass} text-sm`}
+                  placeholder="e.g. 2021–2023 or Coursework"
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium">
+                  What you did{" "}
+                  <span className="font-normal text-muted-foreground">
+                    (required)
+                  </span>
+                </span>
+                <textarea
+                  value={details}
+                  onChange={(e) => {
+                    setDetails(e.target.value);
+                    setUsingPolished(false);
+                  }}
+                  rows={3}
+                  disabled={busy}
+                  className={`${paperInputClass} min-h-[4.5rem] resize-y text-sm leading-relaxed`}
+                  placeholder="e.g. Built weekly reports in Excel for a 6-person ops team…"
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium">
+                  Outcome{" "}
+                  <span className="font-normal text-muted-foreground">
+                    (optional)
+                  </span>
+                </span>
+                <input
+                  type="text"
+                  value={outcome}
+                  onChange={(e) => {
+                    setOutcome(e.target.value);
+                    setUsingPolished(false);
+                  }}
+                  disabled={busy}
+                  className={`${paperInputClass} text-sm`}
+                  placeholder="e.g. Cut reporting time by ~2 hours/week"
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium">
+                  Section{" "}
+                  <span className="font-normal text-muted-foreground">
+                    (optional)
+                  </span>
+                </span>
+                <select
+                  value={section}
+                  onChange={(e) => setSection(e.target.value)}
+                  disabled={busy}
+                  className={`${paperInputClass} text-sm`}
+                >
+                  <option value="">Not sure</option>
+                  {CAREER_SECTIONS.map((s) => (
+                    <option key={s.value} value={s.value}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {/* Improve with AI — only after ≥10 words in What you did */}
+              {canImprove ? (
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    disabled={busy || !role.trim()}
+                    onClick={requestImprove}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-guava-green/30 bg-white px-3 py-1.5 text-sm font-medium transition-colors hover:border-guava-green/50 hover:bg-guava-green/5 active:scale-[0.98] disabled:opacity-50"
+                  >
+                    {improveMutation.isPending ? (
+                      <CircleNotch
+                        className="size-3.5 animate-spin"
+                        weight="bold"
+                      />
+                    ) : (
+                      <MagicWand className="size-3.5" weight="bold" />
+                    )}
+                    Improve with AI
+                  </button>
+                  <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    Optional — polishes your facts only (uses AI quota). You can
+                    Save without it.
+                  </p>
+                </div>
               ) : (
-                <Check className="size-3.5" weight="bold" />
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  Write at least {IMPROVE_WORD_MIN} words in &ldquo;What you
+                  did&rdquo; to unlock Improve with AI (
+                  {detailsWordCount}/{IMPROVE_WORD_MIN}).
+                </p>
               )}
-              Save
-            </button>
-            <button
-              type="button"
-              disabled={saving}
-              onClick={cancel}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-guava-green/25 bg-white px-3 py-1.5 text-sm font-medium disabled:opacity-50"
-            >
-              <X className="size-3.5" weight="bold" />
-              Cancel
-            </button>
-          </div>
+
+              {improveError ? (
+                <p className="text-sm text-destructive" role="alert">
+                  {improveError}
+                </p>
+              ) : null}
+
+              {improveWarnings.length > 0 ? (
+                <ul className="list-disc space-y-1 pl-4 text-xs text-guava-pink">
+                  {improveWarnings.map((w) => (
+                    <li key={w}>{w}</li>
+                  ))}
+                </ul>
+              ) : null}
+
+              {polished !== null ? (
+                <div className="space-y-2 rounded-lg border border-guava-green/20 bg-white/70 p-2.5">
+                  <p className="text-xs font-medium">AI suggestion</p>
+                  <textarea
+                    value={polishedEdit}
+                    onChange={(e) => {
+                      setPolishedEdit(e.target.value);
+                      setUsingPolished(false);
+                    }}
+                    rows={4}
+                    disabled={busy}
+                    className={`${paperInputClass} min-h-[5rem] resize-y text-sm leading-relaxed`}
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={busy || !polishedEdit.trim()}
+                      onClick={() => setUsingPolished(true)}
+                      className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm font-medium active:scale-[0.98] disabled:opacity-50 ${
+                        usingPolished
+                          ? "bg-guava-green/20 text-guava-green"
+                          : "border border-guava-green/25 bg-white"
+                      }`}
+                    >
+                      <Check className="size-3.5" weight="bold" />
+                      {usingPolished ? "Using this" : "Use this"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => {
+                        setPolished(null);
+                        setPolishedEdit("");
+                        setUsingPolished(false);
+                        setImproveWarnings([]);
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-guava-green/25 bg-white px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+                    >
+                      Keep original
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              {error ? (
+                <p className="text-sm text-destructive" role="alert">
+                  {error}
+                </p>
+              ) : null}
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  disabled={busy || !canSave}
+                  onClick={submit}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-50 active:scale-[0.98]"
+                >
+                  {saving ? (
+                    <CircleNotch
+                      className="size-3.5 animate-spin"
+                      weight="bold"
+                    />
+                  ) : (
+                    <Check className="size-3.5" weight="bold" />
+                  )}
+                  {addressed ? "Save changes" : "Save"}
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={cancel}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-guava-green/25 bg-white px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+                >
+                  <X className="size-3.5" weight="bold" />
+                  Cancel
+                </button>
+              </div>
+            </>
+          ) : null}
+
+          {honesty === null ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={cancel}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-guava-green/25 bg-white px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+              >
+                <X className="size-3.5" weight="bold" />
+                Cancel
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </li>
@@ -198,10 +614,12 @@ function GapItem({
 export function AtsReportPanel({
   applicationId,
   report,
+  careerEnrichments = [],
   onApplicationUpdated,
 }: {
   applicationId: string;
   report: ApplicationAtsReport;
+  careerEnrichments?: CareerGapEnrichment[];
   /** Called after gap save (or ATS refresh) so the parent can sync application state. */
   onApplicationUpdated?: (app: ApplicationResponse) => void;
 }) {
@@ -211,11 +629,16 @@ export function AtsReportPanel({
   const [assessedAtBaseline, setAssessedAtBaseline] = useState<string | null>(
     null,
   );
-  const [addressedGaps, setAddressedGaps] = useState<Set<string>>(
-    () => new Set(),
-  );
   const [savingGap, setSavingGap] = useState<string | null>(null);
   const [gapErrors, setGapErrors] = useState<Record<string, string>>({});
+
+  const enrichmentByGap = useMemo(() => {
+    const map = new Map<string, CareerGapEnrichment>();
+    for (const e of careerEnrichments) {
+      map.set(e.gapText, e);
+    }
+    return map;
+  }, [careerEnrichments]);
 
   const refreshMutation = useMutation({
     mutationFn: async () => {
@@ -268,9 +691,8 @@ export function AtsReportPanel({
         return next;
       });
     },
-    onSuccess: (data, body) => {
+    onSuccess: (data) => {
       setSavingGap(null);
-      setAddressedGaps((prev) => new Set(prev).add(body.gapText));
       queryClient.setQueryData(["application", applicationId], data);
       onApplicationUpdated?.(data);
     },
@@ -302,8 +724,6 @@ export function AtsReportPanel({
     if (report.assessedAt !== assessedAtBaseline && report.stale !== true) {
       setAwaitingRefresh(false);
       setAssessedAtBaseline(null);
-      // Fresh report — clear local addressed markers so gaps reflect new scoring.
-      setAddressedGaps(new Set());
       setGapErrors({});
     }
   }, [
@@ -333,7 +753,7 @@ export function AtsReportPanel({
           <span>
             {refreshing
               ? "Updating fit report…"
-              : "click to update"}
+              : "Update fit report to rescore"}
           </span>
         </button>
       ) : null}
@@ -362,6 +782,12 @@ export function AtsReportPanel({
         <ScoreRing score={report.cvScore ?? report.score} label="CV keywords" />
       </div>
 
+      {report.changeSummary?.trim() ? (
+        <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
+          {report.changeSummary.trim()}
+        </p>
+      ) : null}
+
       <div className="mt-6 space-y-6">
         {report.careerSuggestion?.trim() ||
         (report.suggestedRoles && report.suggestedRoles.length > 0) ? (
@@ -388,16 +814,25 @@ export function AtsReportPanel({
             </p>
           ) : (
             <ul className="mt-2 list-disc space-y-3 pl-5 text-sm text-muted-foreground">
-              {report.gaps.map((gap) => (
-                <GapItem
-                  key={gap}
-                  gapText={gap}
-                  addressed={addressedGaps.has(gap)}
-                  saving={savingGap === gap}
-                  error={gapErrors[gap] ?? null}
-                  onSave={(body) => addressGapMutation.mutate(body)}
-                />
-              ))}
+              {report.gaps.map((gap) => {
+                const detailed = report.gapsDetailed?.find(
+                  (g) => g.text === gap,
+                );
+                return (
+                  <GapItem
+                    key={gap}
+                    applicationId={applicationId}
+                    gapText={gap}
+                    gapKind={detailed?.kind}
+                    saved={enrichmentByGap.get(gap)}
+                    saving={savingGap === gap}
+                    error={gapErrors[gap] ?? null}
+                    suggestedRoles={report.suggestedRoles ?? []}
+                    missingKeywords={report.missingKeywords ?? []}
+                    onSave={(body) => addressGapMutation.mutate(body)}
+                  />
+                );
+              })}
             </ul>
           )}
         </div>

@@ -1,11 +1,18 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma, ProfileCareerCv as ProfileCareerCvRow } from '@prisma/client';
+import {
+  GapAnswerImprover,
+  MIN_GAP_IMPROVE_WORDS,
+  countWords,
+} from '../ai/gap-answer.improver';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   AddressGapInput,
   CareerCvEnrichment,
   careerCvEnrichmentsSchema,
   emptyCareerCvContent,
+  ImproveGapInput,
+  ImproveGapResponse,
   PatchCareerCvInput,
   ProfileCareerCv,
   ProfileCareerCvContent,
@@ -17,11 +24,20 @@ import {
   applicationDetailInclude,
   toApplicationResponse,
 } from '../applications/application.mapper';
-import { mergeEnrichmentIntoContent } from './career-cv.merge';
+import { UsageService } from '../users/usage.service';
+import {
+  mergeEnrichmentIntoContent,
+  rebuildContentFromEnrichments,
+  removeEnrichmentFromContent,
+} from './career-cv.merge';
 
 @Injectable()
 export class CareerCvService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gapImprover: GapAnswerImprover,
+    private readonly usage: UsageService,
+  ) {}
 
   async getByProfileId(
     userId: string,
@@ -106,8 +122,9 @@ export class CareerCvService {
 
     await this.assertOwnedProfile(userId, app.profileId);
 
+    const gapKey = input.gapText.trim();
     const enrichment: CareerCvEnrichment = {
-      gapText: input.gapText.trim(),
+      gapText: gapKey,
       answer: input.answer.trim(),
       ...(input.section?.trim() ? { section: input.section.trim() } : {}),
       createdAt: new Date().toISOString(),
@@ -124,7 +141,12 @@ export class CareerCvService {
       ? this.parseEnrichments(existing.enrichments)
       : [];
 
-    if (baseEnrichments.length >= 200) {
+    const existingIndex = baseEnrichments.findIndex(
+      (e) => e.gapText.trim() === gapKey,
+    );
+    const isEdit = existingIndex >= 0;
+
+    if (!isEdit && baseEnrichments.length >= 200) {
       throw new AppError(
         'CAREER_CV_ENRICHMENTS_FULL',
         'Career profile enrichment limit reached',
@@ -132,8 +154,17 @@ export class CareerCvService {
       );
     }
 
-    const mergedContent = mergeEnrichmentIntoContent(baseContent, enrichment);
-    const enrichments = [...baseEnrichments, enrichment];
+    if (isEdit) {
+      enrichment.createdAt = baseEnrichments[existingIndex]!.createdAt;
+    }
+
+    const enrichments = isEdit
+      ? baseEnrichments.map((e, i) => (i === existingIndex ? enrichment : e))
+      : [...baseEnrichments, enrichment];
+
+    const mergedContent = isEdit
+      ? rebuildContentFromEnrichments(enrichments)
+      : mergeEnrichmentIntoContent(baseContent, enrichment);
 
     await this.prisma.$transaction(async (tx) => {
       await tx.profileCareerCv.upsert({
@@ -152,7 +183,13 @@ export class CareerCvService {
       });
 
       if (app.cvChoice === 'GENERATED' && app.generatedCv) {
-        const genContent = this.parseContent(app.generatedCv.content);
+        let genContent = this.parseContent(app.generatedCv.content);
+        if (isEdit) {
+          genContent = removeEnrichmentFromContent(
+            genContent,
+            baseEnrichments[existingIndex]!,
+          );
+        }
         const mergedGen = mergeEnrichmentIntoContent(genContent, enrichment);
         await tx.generatedCv.update({
           where: { applicationId },
@@ -173,6 +210,42 @@ export class CareerCvService {
     });
 
     return toApplicationResponse(updated, true);
+  }
+
+  /**
+   * Optional AI polish of a user-authored gap draft (facts only).
+   * Thin drafts (< 10 words) return a warning without consuming AI quota.
+   * Successful LLM polish counts toward freemium AI generations (same as hybrid ATS).
+   */
+  async improveGap(
+    userId: string,
+    applicationId: string,
+    input: ImproveGapInput,
+  ): Promise<ImproveGapResponse> {
+    const app = await this.prisma.application.findFirst({
+      where: { id: applicationId, userId },
+      select: { id: true },
+    });
+    if (!app) {
+      throw new AppError('APPLICATION_NOT_FOUND', 'Application not found', 404);
+    }
+
+    const draft = input.draft.trim();
+    const thinDraft = countWords(draft) < MIN_GAP_IMPROVE_WORDS;
+    if (!thinDraft) {
+      await this.usage.assertCanGenerateAi(userId);
+    }
+
+    const result = await this.gapImprover.improve({
+      gapText: input.gapText,
+      draft: input.draft,
+      missingKeywords: input.missingKeywords,
+    });
+
+    if (!thinDraft) {
+      await this.usage.incrementAiUsage(userId);
+    }
+    return result;
   }
 
   async findContentByProfileId(

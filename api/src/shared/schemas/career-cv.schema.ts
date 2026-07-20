@@ -82,3 +82,21 @@ export const addressGapSchema = z.object({
 });
 
 export type AddressGapInput = z.infer<typeof addressGapSchema>;
+
+/** POST /applications/:id/gaps/improve — facts-only polish (AI quota). */
+export const improveGapSchema = z.object({
+  gapText: z.string().min(1).max(2000),
+  /** Composed micro-form text (Role / Dates / Details / Outcome). */
+  draft: z.string().min(1).max(8000),
+  missingKeywords: z.array(z.string().min(1).max(100)).max(50).optional(),
+});
+
+export type ImproveGapInput = z.infer<typeof improveGapSchema>;
+
+export const improveGapResponseSchema = z.object({
+  improvedAnswer: z.string().min(1).max(8000),
+  factsUsed: z.array(z.string().min(1).max(500)).max(50),
+  warnings: z.array(z.string().min(1).max(500)).max(20).optional(),
+});
+
+export type ImproveGapResponse = z.infer<typeof improveGapResponseSchema>;

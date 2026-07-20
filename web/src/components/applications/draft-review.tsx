@@ -176,6 +176,7 @@ function OverviewMaterials({
               <AtsReportPanel
                 applicationId={app.id}
                 report={app.atsReport}
+                careerEnrichments={app.careerEnrichments}
                 onApplicationUpdated={onApplicationUpdated}
               />
             ) : isAi && completed ? (
@@ -654,6 +655,7 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
                         <AtsReportPanel
                           applicationId={app.id}
                           report={app.atsReport}
+                          careerEnrichments={app.careerEnrichments}
                           onApplicationUpdated={syncApplication}
                         />
                       ) : (

@@ -1,6 +1,7 @@
 import {
   CareerCvEnrichment,
   ProfileCareerCvContent,
+  emptyCareerCvContent,
   profileCareerCvContentSchema,
 } from '../shared/schemas/career-cv.schema';
 
@@ -26,6 +27,77 @@ export function mergeEnrichmentIntoContent(
   } else {
     // work / experience / education / certificates / default → work highlights
     mergeIntoWorkHighlights(next, gapText, answer);
+  }
+
+  return profileCareerCvContentSchema.parse(next);
+}
+
+/** Rebuild master career body from the enrichment audit list (used on gap edit). */
+export function rebuildContentFromEnrichments(
+  enrichments: CareerCvEnrichment[],
+): ProfileCareerCvContent {
+  let content = emptyCareerCvContent();
+  for (const enrichment of enrichments) {
+    content = mergeEnrichmentIntoContent(content, enrichment);
+  }
+  return content;
+}
+
+/** Best-effort undo of a prior gap merge before applying an edited answer. */
+export function removeEnrichmentFromContent(
+  content: ProfileCareerCvContent,
+  enrichment: Pick<CareerCvEnrichment, 'gapText' | 'answer' | 'section'>,
+): ProfileCareerCvContent {
+  const next = structuredClone(content);
+  const answer = enrichment.answer.trim();
+  const gapText = enrichment.gapText.trim();
+  const section = normalizeSection(enrichment.section);
+
+  if (section === 'skills' || section === 'competencies') {
+    const names = answer
+      .split(/[,;\n]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const toRemove = new Set(
+      (names.length > 1 ? names : [answer]).map((n) => n.toLowerCase()),
+    );
+    next.skills = next.skills.filter(
+      (s) => !toRemove.has(s.name.toLowerCase()),
+    );
+    next.coreCompetencies = next.coreCompetencies.filter(
+      (c) => !toRemove.has(c.toLowerCase()),
+    );
+  } else if (section === 'projects' || section === 'project') {
+    next.projects = next.projects.filter(
+      (p) =>
+        !(
+          (p.description && p.description.includes(answer)) ||
+          (gapText && p.name.includes(gapText))
+        ),
+    );
+  } else if (section === 'summary') {
+    const summary = next.summary?.trim() ?? '';
+    if (summary === answer) {
+      next.summary = null;
+    } else if (summary.includes(answer)) {
+      const trimmed = summary
+        .replace(`\n\n${answer}`, '')
+        .replace(answer, '')
+        .trim();
+      next.summary = trimmed || null;
+    }
+  } else {
+    for (const role of next.work) {
+      role.highlights = role.highlights.filter((h) => h.trim() !== answer);
+    }
+    next.work = next.work.filter(
+      (w) =>
+        !(
+          w.name === 'Additional experience' &&
+          w.highlights.length === 0 &&
+          w.position.includes(gapText)
+        ),
+    );
   }
 
   return profileCareerCvContentSchema.parse(next);
