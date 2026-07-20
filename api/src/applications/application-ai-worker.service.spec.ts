@@ -65,7 +65,11 @@ const sampleCvContent = {
 describe('ApplicationAiWorkerService.runFullGenerate', () => {
   let service: ApplicationAiWorkerService;
   let prisma: {
-    application: { update: jest.Mock; findFirstOrThrow: jest.Mock };
+    application: {
+      update: jest.Mock;
+      updateMany: jest.Mock;
+      findFirstOrThrow: jest.Mock;
+    };
     user: { findUniqueOrThrow: jest.Mock };
     generatedCv: { upsert: jest.Mock; findUnique: jest.Mock };
     applicationAtsReport: { upsert: jest.Mock };
@@ -82,6 +86,7 @@ describe('ApplicationAiWorkerService.runFullGenerate', () => {
     prisma = {
       application: {
         update: jest.fn().mockResolvedValue({}),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         findFirstOrThrow: jest.fn(),
       },
       user: {
@@ -114,6 +119,9 @@ describe('ApplicationAiWorkerService.runFullGenerate', () => {
         strengths: [],
         gaps: [],
         actionableSteps: [],
+        suggestedRoles: ['Software Engineer'],
+        careerSuggestion:
+          'Your CV is currently suited toward Software Engineer — consider applying for these roles to leverage your existing experience.',
         keywordCoverage: {},
         icpMatch: {},
         breakdown: {},
@@ -199,7 +207,35 @@ describe('ApplicationAiWorkerService.runFullGenerate', () => {
     expect(prisma.generatedCv.upsert).toHaveBeenCalled();
   });
 
-  it('runs GeneratedCv on regenerate when one already exists (even if pref off)', async () => {
+  it('skips GeneratedCv on regenerate when leftover CV exists but cvChoice is UPLOADED', async () => {
+    prisma.user.findUniqueOrThrow.mockResolvedValue({ metadata: {} });
+    prisma.application.findFirstOrThrow.mockResolvedValue({
+      id: 'app_1',
+      userId: 'user_1',
+      profileId: 'profile_1',
+      canonicalJobKey: jobData.canonicalKey,
+      jobSnapshot: bundle.jobSnapshot,
+      pastedJobDescription: null,
+      jobRoleTitle: jobData.title,
+      companyName: jobData.company,
+      applyUrl: jobData.applyUrl,
+      cvChoice: 'UPLOADED',
+    });
+    prisma.generatedCv.findUnique.mockResolvedValue({ id: 'gcv_1' });
+
+    await service.process({
+      type: 'regenerate',
+      applicationId: 'app_1',
+      userId: 'user_1',
+    });
+
+    expect(generatedCvGen.generate).not.toHaveBeenCalled();
+    expect(prisma.generatedCv.upsert).not.toHaveBeenCalled();
+    expect(coverLetterGen.generate).toHaveBeenCalled();
+    expect(atsReportGen.generate).toHaveBeenCalled();
+  });
+
+  it('runs GeneratedCv on regenerate when cvChoice is GENERATED (even if pref off)', async () => {
     prisma.user.findUniqueOrThrow.mockResolvedValue({ metadata: {} });
     prisma.application.findFirstOrThrow.mockResolvedValue({
       id: 'app_1',
@@ -223,6 +259,68 @@ describe('ApplicationAiWorkerService.runFullGenerate', () => {
 
     expect(generatedCvGen.generate).toHaveBeenCalled();
     expect(prisma.generatedCv.upsert).toHaveBeenCalled();
+  });
+
+  it('runs ATS in parallel with CV after cover letter (does not await CV before ATS)', async () => {
+    prisma.user.findUniqueOrThrow.mockResolvedValue({
+      metadata: { autoGenerateTailoredCv: true },
+    });
+    prisma.application.findFirstOrThrow.mockResolvedValue({
+      id: 'app_1',
+      userId: 'user_1',
+      profileId: 'profile_1',
+      canonicalJobKey: jobData.canonicalKey,
+      jobSnapshot: bundle.jobSnapshot,
+      pastedJobDescription: null,
+      jobRoleTitle: jobData.title,
+      companyName: jobData.company,
+      applyUrl: jobData.applyUrl,
+      cvChoice: 'UPLOADED',
+    });
+
+    let releaseCv!: () => void;
+    const cvGate = new Promise<void>((resolve) => {
+      releaseCv = resolve;
+    });
+    let atsStarted = false;
+
+    coverLetterGen.generate.mockImplementation(async () => ({
+      coverLetter: 'A'.repeat(60),
+    }));
+    generatedCvGen.generate.mockImplementation(async () => {
+      await cvGate;
+      return { content: sampleCvContent };
+    });
+    atsReportGen.generate.mockImplementation(async () => {
+      atsStarted = true;
+      releaseCv();
+      return {
+        score: 70,
+        letterScore: 72,
+        cvScore: 68,
+        missingKeywords: [],
+        suggestions: [],
+        strengths: [],
+        gaps: [],
+        actionableSteps: [],
+        suggestedRoles: ['Software Engineer'],
+        careerSuggestion:
+          'Your CV is currently suited toward Software Engineer — consider applying for these roles to leverage your existing experience.',
+        keywordCoverage: {},
+        icpMatch: {},
+        breakdown: {},
+      };
+    });
+
+    await service.process({
+      type: 'generate',
+      applicationId: 'app_1',
+      userId: 'user_1',
+    });
+
+    expect(atsStarted).toBe(true);
+    expect(generatedCvGen.generate).toHaveBeenCalled();
+    expect(atsReportGen.generate).toHaveBeenCalled();
   });
 
   it('soft-fails GeneratedCv so letter + ATS still complete', async () => {
@@ -328,13 +426,34 @@ describe('ApplicationAiWorkerService.runFullGenerate', () => {
     expect(coverLetterGen.generate).toHaveBeenCalled();
   });
 
-  it('uses pastedJobDescription when cache misses and snapshot lacks description', async () => {
-    const pasted = 'Stored pasted JD after cache expiry';
-    jobs.getByCanonicalKey.mockRejectedValue(
-      new Error(
-        'Job not in cache; run search again to refresh Adzuna listings',
-      ),
+  it('skips Redis/ATS expand when pastedJobDescription is present', async () => {
+    const pasted = 'Full pasted job description for the role at Acme Corp';
+    prisma.application.findFirstOrThrow.mockResolvedValue({
+      id: 'app_1',
+      userId: 'user_1',
+      profileId: 'profile_1',
+      canonicalJobKey: jobData.canonicalKey,
+      jobSnapshot: bundle.jobSnapshot,
+      pastedJobDescription: pasted,
+      jobRoleTitle: jobData.title,
+      companyName: jobData.company,
+      applyUrl: jobData.applyUrl,
+    });
+
+    await service.process({
+      type: 'regenerate',
+      applicationId: 'app_1',
+      userId: 'user_1',
+    });
+
+    expect(jobs.getByCanonicalKey).not.toHaveBeenCalled();
+    expect(coverLetterGen.generate).toHaveBeenCalledWith(
+      expect.objectContaining({ jobDescription: pasted }),
     );
+  });
+
+  it('uses pastedJobDescription when snapshot lacks description (no Redis call)', async () => {
+    const pasted = 'Stored pasted JD after cache expiry with enough length';
     prisma.application.findFirstOrThrow.mockResolvedValue({
       id: 'app_1',
       userId: 'user_1',
@@ -357,6 +476,7 @@ describe('ApplicationAiWorkerService.runFullGenerate', () => {
       userId: 'user_1',
     });
 
+    expect(jobs.getByCanonicalKey).not.toHaveBeenCalled();
     expect(snapshots.buildForGenerate).toHaveBeenCalledWith(
       'user_1',
       'profile_1',
@@ -368,12 +488,7 @@ describe('ApplicationAiWorkerService.runFullGenerate', () => {
     );
   });
 
-  it('uses app jobRoleTitle/companyName when cache misses and snapshot is empty', async () => {
-    jobs.getByCanonicalKey.mockRejectedValue(
-      new Error(
-        'Job not in cache; run search again to refresh Adzuna listings',
-      ),
-    );
+  it('uses app jobRoleTitle/companyName with pasted JD without Redis', async () => {
     prisma.application.findFirstOrThrow.mockResolvedValue({
       id: 'app_1',
       userId: 'user_1',
@@ -392,6 +507,7 @@ describe('ApplicationAiWorkerService.runFullGenerate', () => {
       userId: 'user_1',
     });
 
+    expect(jobs.getByCanonicalKey).not.toHaveBeenCalled();
     expect(snapshots.buildForGenerate).toHaveBeenCalledWith(
       'user_1',
       'profile_1',

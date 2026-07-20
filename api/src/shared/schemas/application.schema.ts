@@ -42,6 +42,10 @@ export const applicationAtsReportSchema = z.object({
   strengths: z.array(z.string()),
   gaps: z.array(z.string()),
   actionableSteps: z.array(z.string()),
+  /** Roles the CV supports today — useful when this JD is a poor fit. */
+  suggestedRoles: z.array(z.string()).optional().default([]),
+  /** One-sentence career guidance grounded in suggestedRoles. */
+  careerSuggestion: z.string().nullable().optional(),
   keywordCoverage: z.record(z.number()),
   icpMatch: z.record(z.unknown()),
   breakdown: z.record(z.number()),

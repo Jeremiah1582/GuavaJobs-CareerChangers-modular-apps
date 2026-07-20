@@ -149,6 +149,10 @@ export type ApplicationAtsReport = {
   strengths: string[];
   gaps: string[];
   actionableSteps: string[];
+  /** Roles the CV supports today — useful when this JD is a poor fit. */
+  suggestedRoles?: string[];
+  /** One-sentence career guidance grounded in suggestedRoles. */
+  careerSuggestion?: string | null;
   keywordCoverage: Record<string, number>;
   icpMatch: Record<string, unknown>;
   breakdown: Record<string, number>;
@@ -295,4 +299,14 @@ export function isGeneratingStatus(
   status: GenerationStatus | null | undefined,
 ): boolean {
   return status === "PENDING" || status === "PROCESSING";
+}
+
+/**
+ * Adaptive poll interval while package generation is in flight.
+ * Fast early (catch quick completes), then back off to cut network noise.
+ */
+export function generationPollIntervalMs(elapsedMs: number): number {
+  if (elapsedMs < 15_000) return 1_500;
+  if (elapsedMs < 60_000) return 3_000;
+  return 5_000;
 }

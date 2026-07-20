@@ -6,12 +6,13 @@ import { useEffect, useState } from "react";
 import { apiFetch, ApiError } from "@/api/client";
 import type { ApplicationAtsReport, ApplicationResponse } from "@/api/types";
 import { PaperPanel } from "@/components/ui/paper-panel";
+import { ATS_GOOD_SCORE_MIN } from "@/lib/applications";
 import { AnalyticsEvents, track } from "@/lib/analytics";
 import { getAccessToken } from "@/lib/session";
 
 function ScoreRing({ score, label }: { score: number; label: string }) {
   const tone =
-    score >= 70
+    score >= ATS_GOOD_SCORE_MIN
       ? "text-guava-green"
       : score >= 45
         ? "text-foreground"
@@ -170,6 +171,18 @@ export function AtsReportPanel({
       </div>
 
       <div className="mt-6 space-y-6">
+        {report.careerSuggestion?.trim() ||
+        (report.suggestedRoles && report.suggestedRoles.length > 0) ? (
+          <div>
+            <h3 className="text-sm font-semibold tracking-tight">
+              Where your CV fits best
+            </h3>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+              {report.careerSuggestion?.trim() ||
+                `Your CV is currently suited toward ${formatRoleList(report.suggestedRoles ?? [])} — consider applying for these roles to leverage your existing experience.`}
+            </p>
+          </div>
+        ) : null}
         <BulletList
           title="Strengths"
           items={report.strengths}
@@ -197,4 +210,11 @@ export function AtsReportPanel({
       </div>
     </PaperPanel>
   );
+}
+
+function formatRoleList(roles: string[]): string {
+  if (roles.length === 0) return "roles that match your background";
+  if (roles.length === 1) return roles[0]!;
+  if (roles.length === 2) return `${roles[0]} and ${roles[1]}`;
+  return `${roles.slice(0, -1).join(", ")}, and ${roles[roles.length - 1]}`;
 }

@@ -22,7 +22,7 @@ import type {
 import { QuotaSheet } from "@/components/applications/quota-sheet";
 import { PaperPanel, paperInputClass } from "@/components/ui/paper-panel";
 import { AnalyticsEvents, track } from "@/lib/analytics";
-import { effectiveJobDescription } from "@/components/applications/job-description-panel";
+import { effectiveJobDescription } from "@/lib/applications";
 import { getAccessToken } from "@/lib/session";
 
 function Section({

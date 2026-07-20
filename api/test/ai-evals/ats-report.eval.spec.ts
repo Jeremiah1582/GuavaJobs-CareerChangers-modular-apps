@@ -39,8 +39,12 @@ const run = aiEvalsEnabled();
           ...result.suggestions,
           ...result.actionableSteps,
           ...result.missingKeywords,
+          ...result.suggestedRoles,
+          result.careerSuggestion,
         ].join('\n');
         assertHonesty(narrative, fixture, 'ATS narrative');
+        expect(result.suggestedRoles.length).toBeGreaterThan(0);
+        expect(result.careerSuggestion.trim().length).toBeGreaterThan(20);
       } finally {
         await module.close();
       }

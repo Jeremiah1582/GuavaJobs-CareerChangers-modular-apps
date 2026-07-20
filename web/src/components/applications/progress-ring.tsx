@@ -2,11 +2,48 @@
 
 import { Check } from "@phosphor-icons/react";
 import { motion, useReducedMotion } from "framer-motion";
+import type { ApplicationResponse } from "@/api/types";
+import {
+  ATS_GOOD_SCORE_MIN,
+  hasFullJobDescription,
+} from "@/lib/applications";
 
 export type ProgressStage = {
   label: string;
   done: boolean;
 };
+
+export function hasCoverLetter(app: ApplicationResponse): boolean {
+  return (app.coverLetterContent ?? "").trim().length >= 50;
+}
+
+export function hasApplicationCv(app: ApplicationResponse): boolean {
+  return !!app.cvSnapshot || !!app.generatedCv;
+}
+
+export function hasGoodAtsScore(app: ApplicationResponse): boolean {
+  const report = app.atsReport;
+  if (!report) return false;
+  if (report.stale === true) return false;
+  return report.score >= ATS_GOOD_SCORE_MIN;
+}
+
+export function hasApplied(app: ApplicationResponse): boolean {
+  return app.status !== "DRAFT";
+}
+
+/** At-a-glance readiness checklist for the application review desk. */
+export function applicationProgressStages(
+  app: ApplicationResponse,
+): ProgressStage[] {
+  return [
+    { label: "Job description", done: hasFullJobDescription(app) },
+    { label: "Cover letter", done: hasCoverLetter(app) },
+    { label: "CV", done: hasApplicationCv(app) },
+    { label: "ATS score", done: hasGoodAtsScore(app) },
+    { label: "Apply", done: hasApplied(app) },
+  ];
+}
 
 const SIZE = 56;
 const STROKE = 4.5;

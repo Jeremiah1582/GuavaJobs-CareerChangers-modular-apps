@@ -117,6 +117,7 @@ export class ApplicationAiWorkerService {
   }
 
   private async runFullGenerate(job: AiGenerationJobData): Promise<void> {
+    const started = Date.now();
     const app = await this.prisma.application.findFirstOrThrow({
       where: { id: job.applicationId, userId: job.userId },
     });
@@ -130,15 +131,10 @@ export class ApplicationAiWorkerService {
       select: { metadata: true },
     });
     const prefs = preferencesFromMetadata(user.metadata);
-    const existingGeneratedCv = await this.prisma.generatedCv.findUnique({
-      where: { applicationId: app.id },
-      select: { id: true },
-    });
-    // Regenerate tailored CV when preference is on, user already has one, or chose GENERATED.
+    // Tailored CV only when preference is on or user actively selected GENERATED.
+    // A leftover GeneratedCv row with cvChoice=UPLOADED must not slow package regen.
     const shouldGenerateCv =
-      prefs.autoGenerateTailoredCv ||
-      !!existingGeneratedCv ||
-      app.cvChoice === 'GENERATED';
+      prefs.autoGenerateTailoredCv || app.cvChoice === 'GENERATED';
 
     const jobData = await this.resolveJobForWorker({
       canonicalJobKey: app.canonicalJobKey,
@@ -176,28 +172,38 @@ export class ApplicationAiWorkerService {
       cvText,
     };
 
-    // Soft-fail GeneratedCv so a Zod/LLM CV error never blocks letter + ATS.
-    const [coverLetter, generatedCv] = await Promise.all([
-      this.coverLetterGen.generate(genInput),
-      shouldGenerateCv
-        ? this.generatedCvGen.generate(genInput).catch((error: unknown) => {
-            const message =
-              error instanceof Error ? error.message : 'Generated CV failed';
-            this.logger.warn(
-              `GeneratedCv soft-failed for ${app.id} (package continues): ${message}`,
-            );
-            return null;
-          })
-        : Promise.resolve(null),
-    ]);
+    await this.touchProcessing(app.id);
 
-    const ats = await this.atsReportGen.generate({
+    // Cover letter first (ATS needs it). Soft-fail CV; run ATS in parallel with CV
+    // so a slow tailored-CV call does not delay the fit report.
+    const coverLetter = await this.withProcessingHeartbeat(
+      app.id,
+      this.coverLetterGen.generate(genInput),
+    );
+
+    const cvPromise = shouldGenerateCv
+      ? this.generatedCvGen.generate(genInput).catch((error: unknown) => {
+          const message =
+            error instanceof Error ? error.message : 'Generated CV failed';
+          this.logger.warn(
+            `GeneratedCv soft-failed for ${app.id} (package continues): ${message}`,
+          );
+          return null;
+        })
+      : Promise.resolve(null);
+
+    const atsPromise = this.atsReportGen.generate({
       jobTitle: jobData.title,
       companyName: jobData.company,
       jobDescription,
       coverLetter: coverLetter.coverLetter,
       cvText,
     });
+
+    const [generatedCv, ats] = await this.withProcessingHeartbeat(
+      app.id,
+      Promise.all([cvPromise, atsPromise]),
+    );
 
     const atsFingerprint = buildApplicationAtsFingerprint({
       jobDescription,
@@ -267,6 +273,8 @@ export class ApplicationAiWorkerService {
           strengths: ats.strengths,
           gaps: ats.gaps,
           actionableSteps: ats.actionableSteps,
+          suggestedRoles: ats.suggestedRoles,
+          careerSuggestion: ats.careerSuggestion || null,
           keywordCoverage: ats.keywordCoverage,
           icpMatch: ats.icpMatch as Prisma.InputJsonValue,
           breakdown: ats.breakdown,
@@ -282,6 +290,8 @@ export class ApplicationAiWorkerService {
           strengths: ats.strengths,
           gaps: ats.gaps,
           actionableSteps: ats.actionableSteps,
+          suggestedRoles: ats.suggestedRoles,
+          careerSuggestion: ats.careerSuggestion || null,
           keywordCoverage: ats.keywordCoverage,
           icpMatch: ats.icpMatch as Prisma.InputJsonValue,
           breakdown: ats.breakdown,
@@ -292,6 +302,42 @@ export class ApplicationAiWorkerService {
     });
 
     await this.usage.incrementAiUsage(job.userId);
+    this.logger.log(
+      JSON.stringify({
+        event: 'package_generate_done',
+        applicationId: app.id,
+        type: job.type,
+        includeCv: shouldGenerateCv,
+        cvProduced: !!generatedCv,
+        ms: Date.now() - started,
+      }),
+    );
+  }
+
+  /** Bump updatedAt so stuck-detection / UI know the worker is still alive. */
+  private async touchProcessing(applicationId: string): Promise<void> {
+    await this.prisma.application.updateMany({
+      where: {
+        id: applicationId,
+        generationStatus: ApplicationGenerationStatus.PROCESSING,
+      },
+      data: { generationError: null },
+    });
+  }
+
+  /** Keep PROCESSING heartbeats during long LLM awaits (avoids false "stuck"). */
+  private async withProcessingHeartbeat<T>(
+    applicationId: string,
+    work: Promise<T>,
+  ): Promise<T> {
+    const timer = setInterval(() => {
+      void this.touchProcessing(applicationId).catch(() => undefined);
+    }, 25_000);
+    try {
+      return await work;
+    } finally {
+      clearInterval(timer);
+    }
   }
 
   private async resolveJobForWorker(app: {
@@ -302,12 +348,19 @@ export class ApplicationAiWorkerService {
     companyName: string | null;
     applyUrl: string | null;
   }): Promise<import('../shared/schemas/job.schema').UnifiedJob> {
+    const fromStore = this.jobFromStoredData(app);
+    const pasted = app.pastedJobDescription?.trim() ?? '';
+    // Skip Redis/ATS expand when paste or rich snapshot already supplies the JD.
+    if (fromStore && (pasted || fromStore.hasFullDescription)) {
+      return fromStore;
+    }
+
     try {
       return await this.jobs.getByCanonicalKey(app.canonicalJobKey, {
-        expandAts: true,
+        // Only expand when we still lack a usable full description.
+        expandAts: !fromStore?.hasFullDescription,
       });
     } catch (error) {
-      const fromStore = this.jobFromStoredData(app);
       if (fromStore) {
         this.logger.warn(
           `Worker using stored job data for ${app.canonicalJobKey} (cache miss)`,
@@ -485,6 +538,8 @@ export class ApplicationAiWorkerService {
           strengths: ats.strengths,
           gaps: ats.gaps,
           actionableSteps: ats.actionableSteps,
+          suggestedRoles: ats.suggestedRoles,
+          careerSuggestion: ats.careerSuggestion || null,
           keywordCoverage: ats.keywordCoverage,
           icpMatch: ats.icpMatch as Prisma.InputJsonValue,
           breakdown: ats.breakdown,
@@ -500,6 +555,8 @@ export class ApplicationAiWorkerService {
           strengths: ats.strengths,
           gaps: ats.gaps,
           actionableSteps: ats.actionableSteps,
+          suggestedRoles: ats.suggestedRoles,
+          careerSuggestion: ats.careerSuggestion || null,
           keywordCoverage: ats.keywordCoverage,
           icpMatch: ats.icpMatch as Prisma.InputJsonValue,
           breakdown: ats.breakdown,

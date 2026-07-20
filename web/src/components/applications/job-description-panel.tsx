@@ -14,31 +14,11 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { apiFetch, ApiError } from "@/api/client";
 import type { ApplicationResponse } from "@/api/types";
 import { PaperPanel, paperInputClass } from "@/components/ui/paper-panel";
+import {
+  effectiveJobDescription,
+  hasFullJobDescription,
+} from "@/lib/applications";
 import { getAccessToken } from "@/lib/session";
-
-function snapshotDescription(
-  jobSnapshot: Record<string, unknown> | null,
-): string {
-  if (!jobSnapshot) return "";
-  const d = jobSnapshot.description;
-  return typeof d === "string" ? d : "";
-}
-
-function snapshotSnippet(
-  jobSnapshot: Record<string, unknown> | null,
-): string {
-  if (!jobSnapshot) return "";
-  const s = jobSnapshot.snippet;
-  return typeof s === "string" ? s : "";
-}
-
-export function effectiveJobDescription(app: ApplicationResponse): string {
-  const pasted = (app.pastedJobDescription ?? "").trim();
-  if (pasted) return pasted;
-  const fromSnap = snapshotDescription(app.jobSnapshot).trim();
-  if (fromSnap) return fromSnap;
-  return snapshotSnippet(app.jobSnapshot).trim();
-}
 
 function truncatePreview(text: string, max = 160): string {
   const flat = text.replace(/\s+/g, " ").trim();
@@ -65,8 +45,7 @@ export function JobDescriptionPanel({
 
   const effective = effectiveJobDescription(app);
   const hasPasted = !!(app.pastedJobDescription ?? "").trim();
-  const hasFull =
-    hasPasted || snapshotDescription(app.jobSnapshot).trim().length > 0;
+  const hasFull = hasFullJobDescription(app);
 
   useEffect(() => {
     if (!editing) {
@@ -258,7 +237,7 @@ export function JobDescriptionPanel({
             role="status"
           >
             <p className="text-sm text-foreground">
-              Description updated. Regenerate to refresh letter and CV.
+              Description updated. Regenerate to refresh letter and fit report.
             </p>
             <div className="flex flex-wrap gap-2">
               <button

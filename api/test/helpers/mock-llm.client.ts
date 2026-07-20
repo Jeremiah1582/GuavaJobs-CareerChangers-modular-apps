@@ -57,6 +57,9 @@ export class MockLlmClient {
       strengths: ['Strong communication'],
       gaps: ['No container experience'],
       actionableSteps: ['Learn Docker basics'],
+      suggestedRoles: ['Software Engineer', 'Backend Engineer', 'Full-Stack Developer'],
+      careerSuggestion:
+        'Your CV is currently suited toward Software Engineer, Backend Engineer, and Full-Stack Developer — consider applying for these roles to leverage your existing experience.',
       keywordCoverage: { typescript: 1 },
       icpMatch: { fit: 'good' },
       breakdown: { skills: 70 },

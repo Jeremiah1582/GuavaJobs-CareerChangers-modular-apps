@@ -203,6 +203,8 @@ function toAtsReportResponse(report: ApplicationAtsReport, stale: boolean) {
     strengths: jsonStringArray(report.strengths),
     gaps: jsonStringArray(report.gaps),
     actionableSteps: jsonStringArray(report.actionableSteps),
+    suggestedRoles: jsonStringArray(report.suggestedRoles),
+    careerSuggestion: report.careerSuggestion ?? null,
     keywordCoverage: jsonNumberRecord(report.keywordCoverage),
     icpMatch: jsonRecord(report.icpMatch) ?? {},
     breakdown: jsonNumberRecord(report.breakdown),

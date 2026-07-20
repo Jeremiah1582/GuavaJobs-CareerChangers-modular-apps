@@ -57,6 +57,40 @@ export function applicationCompany(app: ApplicationResponse): string | null {
   return null;
 }
 
+function snapshotDescription(
+  jobSnapshot: Record<string, unknown> | null,
+): string {
+  if (!jobSnapshot) return "";
+  const d = jobSnapshot.description;
+  return typeof d === "string" ? d : "";
+}
+
+function snapshotSnippet(
+  jobSnapshot: Record<string, unknown> | null,
+): string {
+  if (!jobSnapshot) return "";
+  const s = jobSnapshot.snippet;
+  return typeof s === "string" ? s : "";
+}
+
+/** Prefer pasted full text, then snapshot description, then short listing snippet. */
+export function effectiveJobDescription(app: ApplicationResponse): string {
+  const pasted = (app.pastedJobDescription ?? "").trim();
+  if (pasted) return pasted;
+  const fromSnap = snapshotDescription(app.jobSnapshot).trim();
+  if (fromSnap) return fromSnap;
+  return snapshotSnippet(app.jobSnapshot).trim();
+}
+
+/** True when we have full listing text — not Adzuna/snippet-only. */
+export function hasFullJobDescription(app: ApplicationResponse): boolean {
+  if ((app.pastedJobDescription ?? "").trim()) return true;
+  return snapshotDescription(app.jobSnapshot).trim().length > 0;
+}
+
+/** Green band on fit score rings — good enough to apply with confidence. */
+export const ATS_GOOD_SCORE_MIN = 70;
+
 export function latestNextStep(
   events: ApplicationEvent[] | undefined,
 ): ApplicationEvent | null {

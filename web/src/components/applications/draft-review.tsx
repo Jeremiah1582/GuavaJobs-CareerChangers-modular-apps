@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { apiFetch, ApiError } from "@/api/client";
 import {
+  generationPollIntervalMs,
   isGeneratingStatus,
   type ApplicationResponse,
   type MeResponse,
@@ -29,7 +30,7 @@ import { HybridAiPanel } from "@/components/applications/hybrid-ai-panel";
 import { JobDescriptionPanel } from "@/components/applications/job-description-panel";
 import {
   ProgressRing,
-  type ProgressStage,
+  applicationProgressStages,
 } from "@/components/applications/progress-ring";
 import { QuotaSheet } from "@/components/applications/quota-sheet";
 import { StatusAndEvents } from "@/components/applications/status-and-events";
@@ -170,14 +171,6 @@ function RegenerateConfirm({
       ) : null}
     </AnimatePresence>
   );
-}
-
-function applicationProgressStages(app: ApplicationResponse): ProgressStage[] {
-  return [
-    { label: "Materials", done: !!app.coverLetterContent },
-    { label: "CV", done: !!app.cvSnapshot || !!app.generatedCv },
-    { label: "Apply", done: app.status !== "DRAFT" },
-  ];
 }
 
 /** Full pre-desk stacked materials — Overview mounts real panels, not summaries. */
@@ -345,8 +338,12 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
         token,
       });
     },
-    refetchInterval: (q) =>
-      isGeneratingStatus(q.state.data?.generationStatus) ? 2500 : false,
+    refetchInterval: (q) => {
+      if (!isGeneratingStatus(q.state.data?.generationStatus)) return false;
+      const elapsed =
+        generatingSince != null ? Date.now() - generatingSince : 0;
+      return generationPollIntervalMs(elapsed);
+    },
     retry: 1,
   });
 
@@ -380,9 +377,6 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
     const id = window.setInterval(() => setNow(Date.now()), 2000);
     return () => window.clearInterval(id);
   }, [generatingSince]);
-
-  const stuckGenerating =
-    generatingSince != null && now - generatingSince >= 90_000;
 
   useEffect(() => {
     const app = appQuery.data;
@@ -486,9 +480,6 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
         mode: "regenerate",
       });
       void queryClient.invalidateQueries({ queryKey: ["me"] });
-      void queryClient.invalidateQueries({
-        queryKey: ["application", applicationId],
-      });
     },
     onError: (err) => {
       setRegenOpen(false);
@@ -513,6 +504,12 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
   const company = app ? applicationCompany(app) : null;
   const canRegen = isAi && (completed || failed) && !generating;
   const hasGenerated = !!app?.generatedCv?.content;
+  // Matches worker: tailored CV only when pref on or actively selected GENERATED.
+  const includeCvInPackage =
+    autoGenerateCv || app?.cvChoice === "GENERATED";
+  const stuckMs = includeCvInPackage ? 120_000 : 90_000;
+  const stuckGenerating =
+    generatingSince != null && now - generatingSince >= stuckMs;
 
   useEffect(() => {
     if (!app) return;
@@ -581,7 +578,7 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
               stuck={stuckGenerating}
               retrying={regenMutation.isPending}
               onRetry={() => regenMutation.mutate()}
-              includeCv={autoGenerateCv || hasGenerated}
+              includeCv={includeCvInPackage}
             />
           ) : null}
 
@@ -760,7 +757,7 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
       <RegenerateConfirm
         open={regenOpen}
         busy={regenMutation.isPending}
-        includeCv={autoGenerateCv || hasGenerated}
+        includeCv={includeCvInPackage}
         onCancel={() => setRegenOpen(false)}
         onConfirm={() => regenMutation.mutate()}
       />

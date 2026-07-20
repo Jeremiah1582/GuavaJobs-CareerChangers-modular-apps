@@ -134,9 +134,10 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  profiles     Profile[]
-  applications Application[]
-  generatedCvs GeneratedCv[]
+  profiles         Profile[]
+  applications     Application[]
+  generatedCvs     GeneratedCv[]
+  profileCareerCvs ProfileCareerCv[]
 
   @@index([email])
   @@map("users")
@@ -181,6 +182,7 @@ model Profile {
   currentCv            CvDocument?           @relation("ProfileCurrentCv", fields: [currentCvId], references: [id], onDelete: SetNull)
   cvDocuments          CvDocument[]          @relation("ProfileCvs")
   generalAtsAssessment ProfileAtsAssessment?
+  careerCv             ProfileCareerCv?
   applications         Application[]
   generatedCvs         GeneratedCv[]
 
@@ -237,6 +239,25 @@ model ProfileAtsAssessment {
 
   @@index([cvDocumentId])
   @@map("profile_ats_assessments")
+}
+
+// ─── Master career corpus (1:1 with Profile; anonymous JSON + gap enrichments) ─
+
+model ProfileCareerCv {
+  id                 String   @id @default(cuid())
+  profileId          String   @unique
+  userId             String
+  content            Json // storedGeneratedCvContentSchema — anonymous
+  enrichments        Json     @default("[]") // [{ gapText, answer, section?, createdAt }]
+  sourceCvDocumentId String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("profile_career_cvs")
 }
 
 // ─── Application (tracker + point-in-time application package) ─────────────
@@ -332,6 +353,10 @@ model ApplicationAtsReport {
   strengths        Json     @default("[]")
   gaps             Json     @default("[]")
   actionableSteps  Json     @default("[]")
+  /// Job titles the CV supports today (career-fit guidance when JD is a poor match).
+  suggestedRoles   Json     @default("[]")
+  /// One-sentence guidance grounded in suggestedRoles.
+  careerSuggestion String?
   keywordCoverage  Json     @default("{}")
   icpMatch         Json     @default("{}")
   breakdown        Json     @default("{}")
