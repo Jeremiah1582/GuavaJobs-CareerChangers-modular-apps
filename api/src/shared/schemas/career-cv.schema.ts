@@ -40,3 +40,45 @@ export const profileCareerCvSchema = z.object({
 });
 
 export type ProfileCareerCv = z.infer<typeof profileCareerCvSchema>;
+
+/** Empty anonymous career body used when bootstrapping ProfileCareerCv. */
+export function emptyCareerCvContent(): ProfileCareerCvContent {
+  return profileCareerCvContentSchema.parse({
+    coreCompetencies: [],
+    work: [],
+    education: [],
+    skills: [],
+    certificates: [],
+    projects: [],
+    languages: [],
+    awards: [],
+    volunteer: [],
+  });
+}
+
+/** PATCH /profiles/:id/career-cv — upsert content and/or replace enrichments. */
+export const patchCareerCvSchema = z
+  .object({
+    /** Full anonymous career body (replaces stored content when provided). */
+    content: profileCareerCvContentSchema.optional(),
+    enrichments: careerCvEnrichmentsSchema.optional(),
+    sourceCvDocumentId: z.string().min(1).nullable().optional(),
+  })
+  .refine(
+    (data) =>
+      data.content !== undefined ||
+      data.enrichments !== undefined ||
+      data.sourceCvDocumentId !== undefined,
+    { message: 'At least one field is required' },
+  );
+
+export type PatchCareerCvInput = z.infer<typeof patchCareerCvSchema>;
+
+/** POST /applications/:id/gaps/address */
+export const addressGapSchema = z.object({
+  gapText: z.string().min(1).max(2000),
+  answer: z.string().min(1).max(8000),
+  section: z.string().min(1).max(100).optional(),
+});
+
+export type AddressGapInput = z.infer<typeof addressGapSchema>;

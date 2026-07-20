@@ -205,8 +205,8 @@ function StructuredCvView({
             </ul>
           ) : (
             <ul className="list-disc space-y-1 pl-5">
-              {data.coreCompetencies.map((item) => (
-                <li key={item}>{item}</li>
+              {data.coreCompetencies.map((item, i) => (
+                <li key={`comp-view-${i}`}>{item}</li>
               ))}
             </ul>
           )}
@@ -378,8 +378,8 @@ function StructuredCvView({
                     </p>
                     {role.highlights.length > 0 ? (
                       <ul className="mt-2 list-disc space-y-1 pl-5">
-                        {role.highlights.map((h) => (
-                          <li key={h}>{h}</li>
+                        {role.highlights.map((h, hi) => (
+                          <li key={`h-${ri}-${hi}`}>{h}</li>
                         ))}
                       </ul>
                     ) : null}
@@ -487,8 +487,8 @@ function StructuredCvView({
             </ul>
           ) : (
             <ul className="space-y-2">
-              {data.education.map((ed) => (
-                <li key={`${ed.institution}-${ed.area}`}>
+              {data.education.map((ed, i) => (
+                <li key={`ed-view-${i}`}>
                   <p className="font-medium text-foreground">
                     {ed.institution}
                   </p>
@@ -550,9 +550,9 @@ function StructuredCvView({
             </ul>
           ) : (
             <ul className="flex flex-wrap gap-2">
-              {data.skills.map((skill) => (
+              {data.skills.map((skill, i) => (
                 <li
-                  key={skill.name}
+                  key={`sk-view-${i}`}
                   className="rounded-full border border-guava-green/20 px-2.5 py-1 text-xs"
                 >
                   {skill.name}

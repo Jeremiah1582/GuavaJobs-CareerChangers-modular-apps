@@ -72,6 +72,7 @@ describe('ApplicationAiWorkerService.runFullGenerate', () => {
     };
     user: { findUniqueOrThrow: jest.Mock };
     generatedCv: { upsert: jest.Mock; findUnique: jest.Mock };
+    profileCareerCv: { findUnique: jest.Mock };
     applicationAtsReport: { upsert: jest.Mock };
     $transaction: jest.Mock;
   };
@@ -94,6 +95,9 @@ describe('ApplicationAiWorkerService.runFullGenerate', () => {
       },
       generatedCv: {
         upsert: jest.fn(),
+        findUnique: jest.fn().mockResolvedValue(null),
+      },
+      profileCareerCv: {
         findUnique: jest.fn().mockResolvedValue(null),
       },
       applicationAtsReport: { upsert: jest.fn() },

@@ -19,6 +19,7 @@ import {
   resolveCvTextForAts,
   resolveCvTextForGeneration,
   resolveJobDescriptionForAts,
+  serializeCareerContent,
 } from './application-ats.fingerprint';
 
 @Injectable()
@@ -158,7 +159,15 @@ export class ApplicationAiWorkerService {
       jobData.description;
 
     const facts = this.jobFacts.parseFromJob(jobData);
-    const cvText = String(bundle.cvSnapshot.parsedText ?? '');
+    const careerRow = await this.prisma.profileCareerCv.findUnique({
+      where: { profileId: app.profileId },
+      select: { content: true },
+    });
+    const careerContent = serializeCareerContent(careerRow?.content);
+    const cvText = resolveCvTextForGeneration({
+      cvSnapshot: bundle.cvSnapshot,
+      careerCvContent: careerRow?.content,
+    });
     const sourceCvDocumentId =
       typeof bundle.cvSnapshot.cvDocumentId === 'string'
         ? bundle.cvSnapshot.cvDocumentId
@@ -211,6 +220,7 @@ export class ApplicationAiWorkerService {
       // Score against the CV the user currently has selected (not a draft they haven't chosen).
       cvText,
       cvChoice: app.cvChoice,
+      careerContent,
     });
 
     // Keep pasted JD in snapshot.description when present so UI + regen stay aligned.
@@ -450,7 +460,7 @@ export class ApplicationAiWorkerService {
   private async runHybridCoverLetter(job: AiGenerationJobData): Promise<void> {
     const app = await this.prisma.application.findFirstOrThrow({
       where: { id: job.applicationId, userId: job.userId },
-      include: { profile: { include: { currentCv: true } } },
+      include: { profile: { include: { currentCv: true, careerCv: true } } },
     });
 
     if (app.generationMode !== ApplicationGenerationMode.MANUAL) {
@@ -465,7 +475,7 @@ export class ApplicationAiWorkerService {
       throw new Error('pastedJobDescription is required');
     }
 
-    const cvText = app.profile.currentCv?.parsedText ?? '';
+    const cvText = resolveCvTextForGeneration(app);
     const coverLetter = await this.coverLetterGen.generate({
       jobTitle: app.jobRoleTitle ?? 'Role',
       companyName: app.companyName ?? 'Company',
@@ -495,7 +505,7 @@ export class ApplicationAiWorkerService {
     const app = await this.prisma.application.findFirstOrThrow({
       where: { id: job.applicationId, userId: job.userId },
       include: {
-        profile: { include: { currentCv: true } },
+        profile: { include: { currentCv: true, careerCv: true } },
         generatedCv: true,
       },
     });
@@ -506,6 +516,7 @@ export class ApplicationAiWorkerService {
     }
 
     const cvText = resolveCvTextForAts(app);
+    const careerContent = serializeCareerContent(app.profile?.careerCv?.content);
     const ats = await this.atsReportGen.generate({
       jobTitle: app.jobRoleTitle ?? 'Role',
       companyName: app.companyName ?? 'Company',
@@ -519,6 +530,7 @@ export class ApplicationAiWorkerService {
       coverLetter: app.coverLetterContent,
       cvText,
       cvChoice: app.cvChoice,
+      careerContent,
     });
 
     const wasInFlight =
@@ -584,7 +596,7 @@ export class ApplicationAiWorkerService {
   private async runHybridGenerateCv(job: AiGenerationJobData): Promise<void> {
     const app = await this.prisma.application.findFirstOrThrow({
       where: { id: job.applicationId, userId: job.userId },
-      include: { profile: { include: { currentCv: true } } },
+      include: { profile: { include: { currentCv: true, careerCv: true } } },
     });
 
     const jd = resolveJobDescriptionForAts(app);

@@ -184,6 +184,7 @@ function OverviewMaterials({
   cvChoiceBusy,
   onSaveLetter,
   onCvChoiceChange,
+  onApplicationUpdated,
 }: {
   app: ApplicationResponse;
   showLetter: boolean;
@@ -194,6 +195,7 @@ function OverviewMaterials({
   cvChoiceBusy: boolean;
   onSaveLetter: (next: string) => Promise<void>;
   onCvChoiceChange: (choice: "UPLOADED" | "GENERATED") => void;
+  onApplicationUpdated?: (app: ApplicationResponse) => void;
 }) {
   const isAi = app.generationMode === "AI";
   const completed = app.generationStatus === "COMPLETED";
@@ -218,6 +220,7 @@ function OverviewMaterials({
               <AtsReportPanel
                 applicationId={app.id}
                 report={app.atsReport}
+                onApplicationUpdated={onApplicationUpdated}
               />
             ) : isAi && completed ? (
               <PaperPanel className="border-guava-green/20 p-6">
@@ -436,6 +439,16 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
       );
     },
   });
+
+  function syncApplication(data: ApplicationResponse) {
+    queryClient.setQueryData(
+      ["application", applicationId],
+      (old: ApplicationResponse | undefined) => ({
+        ...data,
+        events: data.events ?? old?.events,
+      }),
+    );
+  }
 
   async function handleCvChoiceChange(choice: "UPLOADED" | "GENERATED") {
     if (!app || app.cvChoice === choice) return;
@@ -656,6 +669,7 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
                           await saveMutation.mutateAsync(next);
                         }}
                         onCvChoiceChange={(c) => void handleCvChoiceChange(c)}
+                        onApplicationUpdated={syncApplication}
                       />
                     ) : null}
 
@@ -674,9 +688,10 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
                     {tab === "fit" && showAts ? (
                       app.atsReport ? (
                         <AtsReportPanel
-                applicationId={app.id}
-                report={app.atsReport}
-              />
+                          applicationId={app.id}
+                          report={app.atsReport}
+                          onApplicationUpdated={syncApplication}
+                        />
                       ) : (
                         <PaperPanel className="border-guava-green/20 p-6">
                           <h2 className="text-base font-semibold tracking-tight">

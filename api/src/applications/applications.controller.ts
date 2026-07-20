@@ -30,7 +30,12 @@ import {
   hybridCoverLetterSchema,
   hybridGenerateCvSchema,
 } from '../shared/schemas/application.schema';
+import {
+  addressGapSchema,
+  AddressGapInput,
+} from '../shared/schemas/career-cv.schema';
 import { AppError } from '../shared/schemas/error.schema';
+import { CareerCvService } from '../profiles/career-cv.service';
 import { ApplicationGenerateService } from './application-generate.service';
 import { ApplicationManualService } from './application-manual.service';
 import { ApplicationsService } from './applications.service';
@@ -43,6 +48,7 @@ export class ApplicationsController {
     private readonly applications: ApplicationsService,
     private readonly generateService: ApplicationGenerateService,
     private readonly manualService: ApplicationManualService,
+    private readonly careerCv: CareerCvService,
     private readonly pdf: PdfService,
     private readonly prisma: PrismaService,
   ) {}
@@ -141,6 +147,19 @@ export class ApplicationsController {
   @ApiOperation({ summary: 'Manual hybrid — optional AI ATS report' })
   hybridAts(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
     return this.manualService.generateAtsReport(user.id, id);
+  }
+
+  @Post(':id/gaps/address')
+  @ApiOperation({
+    summary:
+      'Address an ATS gap — save fact to master career corpus (no LLM); marks ATS stale',
+  })
+  addressGap(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(addressGapSchema)) body: AddressGapInput,
+  ) {
+    return this.careerCv.addressGap(user.id, id, body);
   }
 
   @Post(':id/generate-cv')

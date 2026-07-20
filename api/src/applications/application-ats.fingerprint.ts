@@ -6,6 +6,8 @@ export type AtsFingerprintInput = {
   coverLetter: string;
   cvText: string;
   cvChoice: 'UPLOADED' | 'GENERATED' | string;
+  /** Serialized master career corpus (ProfileCareerCv.content); omit/empty when none. */
+  careerContent?: string | null;
 };
 
 export function buildApplicationAtsFingerprint(
@@ -14,7 +16,8 @@ export function buildApplicationAtsFingerprint(
   const jd = input.jobDescription.trim();
   const letter = input.coverLetter.trim();
   const cv = input.cvText.trim();
-  const payload = JSON.stringify({
+  const career = (input.careerContent ?? '').trim();
+  const payload: Record<string, unknown> = {
     v: 1,
     cvChoice: input.cvChoice || 'UPLOADED',
     jdLen: jd.length,
@@ -23,8 +26,13 @@ export function buildApplicationAtsFingerprint(
     letterHash: sha256(letter),
     cvLen: cv.length,
     cvHash: sha256(cv),
-  });
-  return createHash('sha256').update(payload).digest('hex');
+  };
+  // Only include when present so existing fingerprints stay stable until career exists.
+  if (career) {
+    payload.careerLen = career.length;
+    payload.careerHash = sha256(career);
+  }
+  return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 }
 
 export function resolveJobDescriptionForAts(app: {
@@ -44,44 +52,92 @@ export function resolveJobDescriptionForAts(app: {
   return fromSnap;
 }
 
+type CareerCvSource = {
+  content?: unknown;
+} | null;
+
+type ProfileWithCv = {
+  currentCv?: { parsedText: string | null } | null;
+  careerCv?: CareerCvSource;
+} | null;
+
 /** Latest uploaded CV text for tailored CV generation (prefers live profile CV). */
 export function resolveCvTextForGeneration(app: {
   cvSnapshot: unknown;
-  profile?: { currentCv?: { parsedText: string | null } | null } | null;
+  profile?: ProfileWithCv;
+  /** Direct career content when profile.careerCv is not loaded. */
+  careerCvContent?: unknown;
 }): string {
   const fromProfile = app.profile?.currentCv?.parsedText?.trim() ?? '';
-  if (fromProfile) return fromProfile;
+  const base = fromProfile
+    ? fromProfile
+    : (() => {
+        const snap =
+          app.cvSnapshot &&
+          typeof app.cvSnapshot === 'object' &&
+          !Array.isArray(app.cvSnapshot)
+            ? (app.cvSnapshot as Record<string, unknown>)
+            : null;
+        return typeof snap?.parsedText === 'string'
+          ? snap.parsedText.trim()
+          : '';
+      })();
 
-  const snap =
-    app.cvSnapshot &&
-    typeof app.cvSnapshot === 'object' &&
-    !Array.isArray(app.cvSnapshot)
-      ? (app.cvSnapshot as Record<string, unknown>)
-      : null;
-  return typeof snap?.parsedText === 'string' ? snap.parsedText.trim() : '';
+  return appendCareerSupplement(
+    base,
+    app.careerCvContent ?? app.profile?.careerCv?.content,
+  );
 }
 
 export function resolveCvTextForAts(app: {
   cvChoice: string;
   cvSnapshot: unknown;
   generatedCv?: { content: unknown } | null;
-  profile?: { currentCv?: { parsedText: string | null } | null } | null;
+  profile?: ProfileWithCv;
+  careerCvContent?: unknown;
 }): string {
+  let base = '';
   if (app.cvChoice === 'GENERATED' && app.generatedCv?.content != null) {
-    return typeof app.generatedCv.content === 'string'
-      ? app.generatedCv.content
-      : JSON.stringify(app.generatedCv.content);
+    base =
+      typeof app.generatedCv.content === 'string'
+        ? app.generatedCv.content
+        : JSON.stringify(app.generatedCv.content);
+  } else {
+    const snap =
+      app.cvSnapshot &&
+      typeof app.cvSnapshot === 'object' &&
+      !Array.isArray(app.cvSnapshot)
+        ? (app.cvSnapshot as Record<string, unknown>)
+        : null;
+    const fromSnap =
+      typeof snap?.parsedText === 'string' ? snap.parsedText.trim() : '';
+    base = fromSnap || (app.profile?.currentCv?.parsedText?.trim() ?? '');
   }
-  const snap =
-    app.cvSnapshot &&
-    typeof app.cvSnapshot === 'object' &&
-    !Array.isArray(app.cvSnapshot)
-      ? (app.cvSnapshot as Record<string, unknown>)
-      : null;
-  const fromSnap =
-    typeof snap?.parsedText === 'string' ? snap.parsedText.trim() : '';
-  if (fromSnap) return fromSnap;
-  return app.profile?.currentCv?.parsedText?.trim() ?? '';
+
+  return appendCareerSupplement(
+    base,
+    app.careerCvContent ?? app.profile?.careerCv?.content,
+  );
+}
+
+/** Stable serialization of ProfileCareerCv.content for fingerprints / prompts. */
+export function serializeCareerContent(content: unknown): string {
+  if (content == null) return '';
+  if (typeof content === 'string') return content.trim();
+  try {
+    return JSON.stringify(content);
+  } catch {
+    return '';
+  }
+}
+
+function appendCareerSupplement(base: string, careerContent: unknown): string {
+  const career = serializeCareerContent(careerContent);
+  if (!career) return base;
+  if (!base.trim()) {
+    return `Master career profile:\n${career}`;
+  }
+  return `${base.trim()}\n\n--- Master career profile ---\n${career}`;
 }
 
 function sha256(value: string): string {

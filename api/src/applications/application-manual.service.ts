@@ -238,7 +238,7 @@ export class ApplicationManualService {
 
     const profile = await this.prisma.profile.findFirst({
       where: { id: app.profileId, userId },
-      include: { currentCv: true },
+      include: { currentCv: true, careerCv: true },
     });
     const cvText = resolveCvTextForGeneration({
       cvSnapshot: app.cvSnapshot,

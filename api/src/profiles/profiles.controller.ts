@@ -16,13 +16,21 @@ import {
   patchProfileSchema,
   PatchProfileInput,
 } from '../shared/schemas/profile.schema';
+import {
+  patchCareerCvSchema,
+  PatchCareerCvInput,
+} from '../shared/schemas/career-cv.schema';
+import { CareerCvService } from './career-cv.service';
 import { ProfilesService } from './profiles.service';
 
 @ApiTags('profiles')
 @ApiBearerAuth()
 @Controller('profiles')
 export class ProfilesController {
-  constructor(private readonly profilesService: ProfilesService) {}
+  constructor(
+    private readonly profilesService: ProfilesService,
+    private readonly careerCvService: CareerCvService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'List profiles for current user' })
@@ -56,5 +64,24 @@ export class ProfilesController {
     @Body(new ZodValidationPipe(patchProfileSchema)) body: PatchProfileInput,
   ) {
     return this.profilesService.patch(user.id, id, body);
+  }
+
+  @Get(':id/career-cv')
+  @ApiOperation({ summary: 'Get master career corpus (anonymous JSON)' })
+  getCareerCv(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.careerCvService.getByProfileId(user.id, id);
+  }
+
+  @Patch(':id/career-cv')
+  @ApiOperation({ summary: 'Upsert/merge master career content or enrichments' })
+  patchCareerCv(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(patchCareerCvSchema)) body: PatchCareerCvInput,
+  ) {
+    return this.careerCvService.patch(user.id, id, body);
   }
 }

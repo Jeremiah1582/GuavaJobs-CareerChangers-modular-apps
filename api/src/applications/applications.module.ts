@@ -3,6 +3,7 @@ import { AiModule } from '../ai/ai.module';
 import { shouldRunBullmqWorkers } from '../config/workers';
 import { JobsModule } from '../jobs/jobs.module';
 import { PdfModule } from '../pdf/pdf.module';
+import { ProfilesModule } from '../profiles/profiles.module';
 import { AiGenerationProcessor } from '../queue/ai-generation.processor';
 import { QueueModule } from '../queue/queue.module';
 import { UsersModule } from '../users/users.module';
@@ -19,7 +20,14 @@ import { IdempotencyService } from './idempotency.service';
 const workerProviders = shouldRunBullmqWorkers() ? [AiGenerationProcessor] : [];
 
 @Module({
-  imports: [QueueModule, AiModule, JobsModule, UsersModule, PdfModule],
+  imports: [
+    QueueModule,
+    AiModule,
+    JobsModule,
+    UsersModule,
+    PdfModule,
+    ProfilesModule,
+  ],
   controllers: [ApplicationsController, ApplicationEventsController],
   providers: [
     ApplicationsService,

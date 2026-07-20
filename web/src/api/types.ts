@@ -161,6 +161,13 @@ export type ApplicationAtsReport = {
   stale?: boolean;
 };
 
+/** POST /applications/:id/gaps/address — save a gap fill into the master career corpus. */
+export type AddressApplicationGapBody = {
+  gapText: string;
+  answer: string;
+  section?: string;
+};
+
 export type ApplicationStatus =
   | "DRAFT"
   | "APPLIED"

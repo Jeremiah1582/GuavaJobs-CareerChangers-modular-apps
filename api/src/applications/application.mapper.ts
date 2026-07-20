@@ -17,6 +17,7 @@ import {
   buildApplicationAtsFingerprint,
   resolveCvTextForAts,
   resolveJobDescriptionForAts,
+  serializeCareerContent,
 } from './application-ats.fingerprint';
 
 type ApplicationWithRelations = Application & {
@@ -24,7 +25,12 @@ type ApplicationWithRelations = Application & {
   events?: ApplicationEvent[];
   generatedCv?: GeneratedCv | null;
   user?: User | null;
-  profile?: (Profile & { currentCv?: { parsedText: string | null } | null }) | null;
+  profile?:
+    | (Profile & {
+        currentCv?: { parsedText: string | null } | null;
+        careerCv?: { content: unknown } | null;
+      })
+    | null;
 };
 
 export function toApplicationResponse(
@@ -184,11 +190,13 @@ function isAtsReportStale(app: ApplicationWithRelations): boolean {
     // Legacy reports without fingerprint: treat as stale so user can refresh once.
     return true;
   }
+  const careerContent = serializeCareerContent(app.profile?.careerCv?.content);
   const current = buildApplicationAtsFingerprint({
     jobDescription: resolveJobDescriptionForAts(app),
     coverLetter: app.coverLetterContent ?? '',
     cvText: resolveCvTextForAts(app),
     cvChoice: app.cvChoice,
+    careerContent,
   });
   return current !== stored;
 }
@@ -244,12 +252,12 @@ export const applicationDetailInclude = {
   atsReport: true,
   generatedCv: true,
   user: true,
-  profile: { include: { currentCv: true } },
+  profile: { include: { currentCv: true, careerCv: true } },
 } as const;
 
 export const applicationListInclude = {
   atsReport: true,
   generatedCv: true,
   user: true,
-  profile: { include: { currentCv: true } },
+  profile: { include: { currentCv: true, careerCv: true } },
 } as const;
