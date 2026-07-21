@@ -191,3 +191,62 @@ describe('ApplicationsService.patch', () => {
     ).rejects.toBeInstanceOf(AppError);
   });
 });
+
+describe('ApplicationsService.getHydratedGeneratedCvExport', () => {
+  let service: ApplicationsService;
+  let prisma: {
+    application: {
+      findFirst: jest.Mock;
+    };
+  };
+
+  beforeEach(() => {
+    prisma = {
+      application: {
+        findFirst: jest.fn(),
+      },
+    };
+    service = new ApplicationsService(
+      prisma as unknown as PrismaService,
+      {} as never,
+    );
+  });
+
+  it('rejects when GeneratedCv is missing', async () => {
+    prisma.application.findFirst.mockResolvedValue(
+      baseApp({
+        generatedCv: null,
+        user: {
+          id: 'user_1',
+          name: 'Jane',
+          email: 'jane@example.com',
+        },
+        profile: {
+          id: 'profile_1',
+          jobTitle: 'Engineer',
+          contactPhone: null,
+          locationCity: null,
+          locationCountry: null,
+        },
+      }),
+    );
+
+    await expect(
+      service.getHydratedGeneratedCvExport('user_1', 'app_1'),
+    ).rejects.toMatchObject({
+      code: 'GENERATED_CV_NOT_FOUND',
+      status: 404,
+    });
+  });
+
+  it('rejects when application is missing', async () => {
+    prisma.application.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.getHydratedGeneratedCvExport('user_1', 'missing'),
+    ).rejects.toMatchObject({
+      code: 'APPLICATION_NOT_FOUND',
+      status: 404,
+    });
+  });
+});

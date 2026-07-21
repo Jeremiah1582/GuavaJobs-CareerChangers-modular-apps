@@ -8,8 +8,11 @@ import {
   buildCanonicalKey,
   parseCanonicalKey,
 } from './ats/canonical-key.util';
+import { stripHtml } from './ats/strip-html.util';
 import { AdzunaListing } from './ats/types/unified-job.types';
 import { JobCacheService } from './cache/job-cache.service';
+import { filterCuratedJobs } from './curated/curated-search.filter';
+import { mergeJobSearchResults } from './curated/curated-search.merge';
 import { AppError } from '../shared/schemas/error.schema';
 import {
   JobListItem,
@@ -33,20 +36,14 @@ export class JobsService {
   ) {}
 
   async search(query: JobSearchQuery): Promise<JobSearchResponse> {
-    if (!this.adzuna.isConfigured()) {
-      throw new AppError(
-        'JOBS_NOT_CONFIGURED',
-        'Adzuna credentials are not configured (ADZUNA_APP_ID + ADZUNA_API_KEY)',
-        503,
-      );
-    }
-
     const country = (query.country ?? 'gb').toLowerCase();
+    const curatedVersion = await this.cache.getCuratedVersion();
     const cacheKey = this.cache.buildSearchCacheKey({
       q: query.q ?? '',
       location: query.location ?? '',
       country,
       page: query.page,
+      curatedVersion,
     });
 
     const cached = await this.cache.getSearch(cacheKey);
@@ -54,81 +51,79 @@ export class JobsService {
       return cached;
     }
 
-    await this.rateLimit.checkAndIncrement();
+    const curatedPool = await this.cache.getCuratedJobs();
+    const curatedMatches = filterCuratedJobs(curatedPool, query, country);
 
-    let listings: AdzunaListing[];
-    let totalResults: number;
-    try {
-      ({ listings, totalResults } = await this.adzuna.search({
-        q: query.q,
-        location: query.location,
-        country,
-        page: query.page,
-      }));
-    } catch (err) {
-      const reason = err instanceof Error ? err.message : 'Unknown Adzuna error';
-      this.logger.error(`Adzuna search failed: ${reason}`);
-      if (reason.includes('fetch failed') || reason.includes('timeout')) {
-        throw new AppError(
-          'JOBS_PROVIDER_UNAVAILABLE',
-          'Job search provider is temporarily unreachable. Try again in a moment.',
-          503,
-          { provider: 'adzuna' },
+    const adzunaConfigured = this.adzuna.isConfigured();
+    let adzunaItems: JobListItem[] = [];
+    let adzunaTotal = 0;
+
+    if (adzunaConfigured) {
+      try {
+        await this.rateLimit.checkAndIncrement();
+        const { listings, totalResults } = await this.adzuna.search({
+          q: query.q,
+          location: query.location,
+          country,
+          page: query.page,
+        });
+        adzunaTotal = totalResults;
+
+        const baseItems = await Promise.all(
+          listings.map((listing) => this.listingToItem(listing, country)),
+        );
+
+        for (const listing of listings) {
+          await this.cacheAdzunaListing(listing, country);
+        }
+
+        const toEnrich = baseItems
+          .filter((item) => item.source !== 'ats_direct')
+          .slice(0, MAX_ENRICH_PER_SEARCH);
+        const enriched = await this.enrichListItems(toEnrich);
+
+        adzunaItems = baseItems.map((item) => {
+          const match = enriched.find(
+            (e) =>
+              e.canonicalKey === item.canonicalKey ||
+              e.applyUrl === item.applyUrl,
+          );
+          return match ? this.toListItem(match) : item;
+        });
+
+        for (const job of enriched) {
+          await this.cache.setJob(job);
+        }
+      } catch (err) {
+        if (curatedMatches.length === 0) {
+          this.throwAdzunaSearchError(err, country);
+        }
+        this.logger.warn(
+          `Adzuna search failed; returning curated-only results: ${
+            err instanceof Error ? err.message : err
+          }`,
         );
       }
-      if (reason.includes('Adzuna search failed (401)') || reason.includes('(403)')) {
-        throw new AppError(
-          'JOBS_NOT_CONFIGURED',
-          'Adzuna API credentials are invalid or expired. Check ADZUNA_APP_ID and ADZUNA_API_KEY.',
-          503,
-        );
-      }
-      if (reason.includes('Adzuna search failed (404)')) {
-        throw new AppError(
-          'JOBS_MARKET_UNSUPPORTED',
-          `Adzuna does not support job search for country "${country}". Pick another market.`,
-          400,
-          { country },
-        );
-      }
+    } else if (curatedMatches.length === 0) {
       throw new AppError(
-        'JOBS_PROVIDER_ERROR',
-        'Job search provider returned an error. Try different keywords or a nearby location.',
-        502,
-        { provider: 'adzuna', reason: reason.slice(0, 200) },
+        'JOBS_NOT_CONFIGURED',
+        'Adzuna credentials are not configured (ADZUNA_APP_ID + ADZUNA_API_KEY)',
+        503,
       );
     }
 
-    const baseItems = await Promise.all(
-      listings.map((listing) => this.listingToItem(listing, country)),
-    );
-
-    for (const listing of listings) {
-      await this.cacheAdzunaListing(listing, country);
-    }
-
-    const enriched = await this.enrichListItems(
-      baseItems.slice(0, MAX_ENRICH_PER_SEARCH),
-    );
-
-    const results: JobListItem[] = baseItems.map((item) => {
-      const match = enriched.find(
-        (e) =>
-          e.canonicalKey === item.canonicalKey ||
-          e.applyUrl === item.applyUrl,
-      );
-      return match ? this.toListItem(match) : item;
+    const merged = mergeJobSearchResults({
+      curated: curatedMatches,
+      adzuna: adzunaItems,
+      page: query.page,
+      adzunaTotal,
     });
 
-    for (const job of enriched) {
-      await this.cache.setJob(job);
-    }
-
     const response: JobSearchResponse = {
-      results,
+      results: merged.results,
       page: query.page,
-      totalResults,
-      attribution: 'Jobs by Adzuna',
+      totalResults: merged.totalResults,
+      attribution: merged.attribution,
     };
 
     await this.cache.setSearch(cacheKey, response);
@@ -169,11 +164,14 @@ export class JobsService {
       return cached;
     }
 
+    // Curated / ATS keys: Redis hit with full JD returns immediately
     if (cached) {
       return cached;
     }
 
-    const job = await this.enrichment.fetchByCanonicalKey(canonicalKey);
+    const job = await this.enrichment.fetchByCanonicalKey(canonicalKey, {
+      source: 'ats_direct',
+    });
     if (!job) {
       throw new AppError('JOB_NOT_FOUND', 'Job not found or ATS fetch failed', 404);
     }
@@ -288,13 +286,49 @@ export class JobsService {
       return existing;
     }
 
-    const job = await this.enrichment.fetchByCanonicalKey(atsKey);
+    const job = await this.enrichment.fetchByCanonicalKey(atsKey, {
+      source: 'adzuna',
+    });
     if (!job) {
       return null;
     }
 
     await this.cache.setJob(job);
     return job;
+  }
+
+  private throwAdzunaSearchError(err: unknown, country: string): never {
+    const reason = err instanceof Error ? err.message : 'Unknown Adzuna error';
+    this.logger.error(`Adzuna search failed: ${reason}`);
+    if (reason.includes('fetch failed') || reason.includes('timeout')) {
+      throw new AppError(
+        'JOBS_PROVIDER_UNAVAILABLE',
+        'Job search provider is temporarily unreachable. Try again in a moment.',
+        503,
+        { provider: 'adzuna' },
+      );
+    }
+    if (reason.includes('Adzuna search failed (401)') || reason.includes('(403)')) {
+      throw new AppError(
+        'JOBS_NOT_CONFIGURED',
+        'Adzuna API credentials are invalid or expired. Check ADZUNA_APP_ID and ADZUNA_API_KEY.',
+        503,
+      );
+    }
+    if (reason.includes('Adzuna search failed (404)')) {
+      throw new AppError(
+        'JOBS_MARKET_UNSUPPORTED',
+        `Adzuna does not support job search for country "${country}". Pick another market.`,
+        400,
+        { country },
+      );
+    }
+    throw new AppError(
+      'JOBS_PROVIDER_ERROR',
+      'Job search provider returned an error. Try different keywords or a nearby location.',
+      502,
+      { provider: 'adzuna', reason: reason.slice(0, 200) },
+    );
   }
 
   private async listingToItem(
@@ -324,6 +358,7 @@ export class JobsService {
       atsType,
       hasFullDescription: false,
       applyType: listing.redirectUrl ? 'url' : 'unknown',
+      source: 'adzuna',
       salaryMin: listing.salaryMin ?? null,
       salaryMax: listing.salaryMax ?? null,
       salaryCurrency: listing.salaryCurrency ?? null,
@@ -377,6 +412,7 @@ export class JobsService {
           }
           const enriched = await this.enrichment.fetchByCanonicalKey(
             item.canonicalKey,
+            { source: 'adzuna' },
           );
           if (enriched) {
             jobs.push(enriched);
@@ -403,17 +439,11 @@ export class JobsService {
       atsType: job.atsType,
       hasFullDescription: job.hasFullDescription,
       applyType: job.applyType,
+      source: job.source,
       salaryMin: job.salaryMin,
       salaryMax: job.salaryMax,
       salaryCurrency: job.salaryCurrency,
       postedAt: job.postedAt,
     };
   }
-}
-
-function stripHtml(html: string): string {
-  return html
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
 }

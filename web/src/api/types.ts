@@ -115,6 +115,7 @@ export type JobListItem = {
   atsType: "greenhouse" | "lever" | "ashby" | "adzuna" | "unknown";
   hasFullDescription: boolean;
   applyType: "url" | "unknown";
+  source?: "adzuna" | "ats_direct";
   salaryMin?: number | null;
   salaryMax?: number | null;
   salaryCurrency?: string | null;
@@ -125,12 +126,12 @@ export type JobSearchResponse = {
   results: JobListItem[];
   page: number;
   totalResults: number;
-  attribution: "Jobs by Adzuna";
+  attribution: "Jobs by Adzuna" | "Company career pages";
 };
 
 export type UnifiedJob = JobListItem & {
   description: string;
-  source: "adzuna";
+  source: "adzuna" | "ats_direct";
   fetchedAt: string;
   adzunaId?: string;
   adzunaCountry?: string;

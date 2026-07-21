@@ -6,7 +6,11 @@ import { shouldRunBullmqWorkers } from '../config/workers';
 import { CvParseService } from '../cv/cv-parse.service';
 import { StorageService } from '../cv/storage.service';
 import { CvParseProcessor } from './cv-parse.processor';
-import { AI_GENERATION_QUEUE, CV_PARSE_QUEUE } from './queue.constants';
+import {
+  AI_GENERATION_QUEUE,
+  CURATED_ATS_SYNC_QUEUE,
+  CV_PARSE_QUEUE,
+} from './queue.constants';
 
 const workerProviders = shouldRunBullmqWorkers() ? [CvParseProcessor] : [];
 
@@ -24,6 +28,7 @@ const workerProviders = shouldRunBullmqWorkers() ? [CvParseProcessor] : [];
     BullModule.registerQueue(
       { name: CV_PARSE_QUEUE },
       { name: AI_GENERATION_QUEUE },
+      { name: CURATED_ATS_SYNC_QUEUE },
     ),
   ],
   providers: [...workerProviders, CvParseService, StorageService],

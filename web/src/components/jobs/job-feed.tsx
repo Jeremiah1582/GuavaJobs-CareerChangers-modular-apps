@@ -13,9 +13,10 @@ import type {
 import { JobsBoard } from "@/components/jobs/jobs-board";
 import {
   JobsSearchBar,
-  type RecommendedSearchCriterion,
+  type SearchCriterion,
 } from "@/components/jobs/jobs-search-bar";
 import { ErrorState } from "@/components/ui/state-panel";
+import { useSavedJobSearches } from "@/hooks/use-saved-job-searches";
 import { AnalyticsEvents, track } from "@/lib/analytics";
 import { deriveJobSearchDefaults } from "@/lib/jobs";
 import { formatJobSearchError } from "@/lib/job-search-errors";
@@ -127,7 +128,7 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
     retry: false,
   });
 
-  const recommendedCriteria: RecommendedSearchCriterion[] = (
+  const recommendedCriteria: SearchCriterion[] = (
     marketFitQuery.data?.roles ?? []
   ).map((role) => ({
     label: role.title,
@@ -135,6 +136,10 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
     country: role.searchCta.country,
     location: role.searchCta.location,
   }));
+
+  const { savedSearches, saveCurrent, remove } = useSavedJobSearches(
+    mode === "app",
+  );
 
   useEffect(() => {
     if (!needsProfileDefaults || defaultsApplied.current) return;
@@ -246,7 +251,7 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
     });
   }
 
-  function onRecommendedSelect(criterion: RecommendedSearchCriterion) {
+  function onCriterionSelect(criterion: SearchCriterion) {
     const nextCountry = normalizeAdzunaCountry(
       criterion.country ?? country,
     );
@@ -267,7 +272,21 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
       location: nextLocation.trim() || null,
       country: nextCountry,
       page: 1,
-      source: "market_fit_tab",
+      source: "search_shortcut",
+    });
+  }
+
+  function onSaveSearch() {
+    saveCurrent({
+      q: query,
+      location,
+      country: normalizeAdzunaCountry(country),
+    });
+    track(AnalyticsEvents.job_search, {
+      q: query.trim() || null,
+      location: location.trim() || null,
+      country: normalizeAdzunaCountry(country),
+      action: "save_search",
     });
   }
 
@@ -356,7 +375,11 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
           onSubmit={onSearch}
           pending={searchPending}
           recommendedCriteria={recommendedCriteria}
-          onRecommendedSelect={onRecommendedSelect}
+          savedSearches={savedSearches}
+          allowSave={mode === "app"}
+          onCriterionSelect={onCriterionSelect}
+          onSaveSearch={onSaveSearch}
+          onRemoveSaved={remove}
         />
       </div>
 

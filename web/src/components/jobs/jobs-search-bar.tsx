@@ -1,23 +1,36 @@
 "use client";
 
 import {
+  BookmarkSimple,
   Briefcase,
+  CaretDown,
   GlobeHemisphereWest,
   MagnifyingGlass,
   MapPin,
+  X,
 } from "@phosphor-icons/react";
-import { FormEvent } from "react";
+import { FormEvent, useId, useState } from "react";
 import { ADZUNA_COUNTRIES } from "@/lib/adzuna-countries";
+import type { SavedJobSearch } from "@/lib/saved-job-searches";
 
 const GUAVA_TAB =
   "bg-gradient-to-br from-[oklch(0.68_0.13_150)] via-[oklch(0.55_0.15_150)] to-[oklch(0.42_0.12_155)] text-white shadow-[0_8px_20px_-10px_color-mix(in_oklab,var(--guava-green)_70%,transparent)]";
 
-export type RecommendedSearchCriterion = {
+const RECOMMENDED_TAB =
+  "bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-700 text-white shadow-[0_6px_16px_-12px_rgba(0,0,0,0.45)]";
+
+const SAVED_TAB =
+  "bg-gradient-to-r from-[oklch(0.72_0.12_150)] via-[oklch(0.58_0.14_150)] to-[oklch(0.48_0.12_155)] text-white shadow-[0_6px_16px_-12px_color-mix(in_oklab,var(--guava-green)_55%,transparent)]";
+
+export type SearchCriterion = {
   label: string;
   q: string;
   country?: string;
   location?: string;
 };
+
+/** @deprecated Use SearchCriterion */
+export type RecommendedSearchCriterion = SearchCriterion;
 
 type JobsSearchBarProps = {
   query: string;
@@ -29,9 +42,86 @@ type JobsSearchBarProps = {
   onSubmit: () => void;
   pending?: boolean;
   /** Market Fit (or similar) suggested search tabs. */
-  recommendedCriteria?: RecommendedSearchCriterion[];
-  onRecommendedSelect?: (criterion: RecommendedSearchCriterion) => void;
+  recommendedCriteria?: SearchCriterion[];
+  savedSearches?: SavedJobSearch[];
+  allowSave?: boolean;
+  onCriterionSelect?: (criterion: SearchCriterion) => void;
+  onSaveSearch?: () => void;
+  onRemoveSaved?: (id: string) => void;
+  /** @deprecated Use onCriterionSelect */
+  onRecommendedSelect?: (criterion: SearchCriterion) => void;
 };
+
+function criterionMatches(
+  activeQ: string,
+  activeLocation: string,
+  activeCountry: string,
+  criterion: SearchCriterion,
+): boolean {
+  return (
+    activeQ === criterion.q.trim().toLowerCase() &&
+    activeLocation === (criterion.location?.trim() ?? "").toLowerCase() &&
+    activeCountry === (criterion.country?.trim().toLowerCase() ?? activeCountry)
+  );
+}
+
+function SearchTab({
+  label,
+  selected,
+  pending,
+  variant,
+  onClick,
+  onRemove,
+}: {
+  label: string;
+  selected: boolean;
+  pending: boolean;
+  variant: "recommended" | "saved";
+  onClick: () => void;
+  onRemove?: () => void;
+}) {
+  const base =
+    variant === "recommended"
+      ? RECOMMENDED_TAB
+      : SAVED_TAB;
+
+  return (
+    <span className="group relative inline-flex shrink-0">
+      <button
+        type="button"
+        role="tab"
+        aria-selected={selected}
+        disabled={pending}
+        onClick={onClick}
+        className={[
+          "inline-flex items-center rounded-t-lg rounded-b-sm px-3 py-1.5 text-xs font-semibold transition-[filter,opacity,box-shadow]",
+          base,
+          selected
+            ? "ring-2 ring-white/40 ring-offset-1 ring-offset-white"
+            : "opacity-90 hover:opacity-100",
+          "disabled:opacity-50",
+          onRemove ? "pr-7" : "",
+        ].join(" ")}
+      >
+        {label}
+      </button>
+      {onRemove ? (
+        <button
+          type="button"
+          aria-label={`Remove saved search ${label}`}
+          disabled={pending}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+          className="absolute right-1 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded-md text-white/80 opacity-0 transition-opacity hover:bg-white/15 hover:text-white group-hover:opacity-100 disabled:opacity-40"
+        >
+          <X className="size-3" weight="bold" />
+        </button>
+      ) : null}
+    </span>
+  );
+}
 
 export function JobsSearchBar({
   query,
@@ -43,14 +133,35 @@ export function JobsSearchBar({
   onSubmit,
   pending = false,
   recommendedCriteria = [],
+  savedSearches = [],
+  allowSave = false,
+  onCriterionSelect,
+  onSaveSearch,
+  onRemoveSaved,
   onRecommendedSelect,
 }: JobsSearchBarProps) {
+  const panelId = useId();
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     onSubmit();
   }
 
+  const selectCriterion = onCriterionSelect ?? onRecommendedSelect;
   const activeQ = query.trim().toLowerCase();
+  const activeLocation = location.trim().toLowerCase();
+  const activeCountry = country.trim().toLowerCase();
+
+  const hasRecommended = recommendedCriteria.length > 0;
+  const hasSaved = savedSearches.length > 0;
+  const showShortcuts = allowSave || hasRecommended || hasSaved;
+  const shortcutCount = recommendedCriteria.length + savedSearches.length;
+
+  const canSave =
+    allowSave &&
+    Boolean(query.trim() || location.trim()) &&
+    onSaveSearch;
 
   return (
     <form
@@ -135,39 +246,123 @@ export function JobsSearchBar({
         </button>
       </div>
 
-      {recommendedCriteria.length > 0 ? (
-        <div className="space-y-1.5 border-t border-guava-green/10 pt-2 sm:pr-1">
-          <p className="px-0.5 text-[0.7rem] font-medium uppercase tracking-wide text-muted-foreground">
-            Recommended search criteria
-          </p>
-          <div
-            role="tablist"
-            aria-label="Recommended search criteria"
-            className="flex gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-          >
-            {recommendedCriteria.map((criterion) => {
-              const selected = activeQ === criterion.q.trim().toLowerCase();
-              return (
-                <button
-                  key={criterion.label}
-                  type="button"
-                  role="tab"
-                  aria-selected={selected}
-                  disabled={pending}
-                  onClick={() => onRecommendedSelect?.(criterion)}
-                  className={[
-                    "inline-flex shrink-0 items-center rounded-t-lg rounded-b-sm px-3 py-1.5 text-xs font-semibold transition-[filter,opacity,box-shadow]",
-                    selected
-                      ? `${GUAVA_TAB} ring-2 ring-white/40 ring-offset-1 ring-offset-white`
-                      : `${GUAVA_TAB} opacity-85 hover:opacity-100`,
-                    "disabled:opacity-50",
-                  ].join(" ")}
-                >
-                  {criterion.label}
-                </button>
-              );
-            })}
+      {showShortcuts ? (
+        <div className="border-t border-guava-green/10 pt-2 sm:pr-1">
+          <div className="flex flex-wrap items-center gap-2 px-0.5">
+            <button
+              type="button"
+              aria-expanded={shortcutsOpen}
+              aria-controls={panelId}
+              onClick={() => setShortcutsOpen((open) => !open)}
+              className="inline-flex items-center gap-1.5 rounded-lg py-1 text-left text-[0.7rem] font-medium uppercase tracking-wide text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <CaretDown
+                className={`size-3.5 transition-transform ${shortcutsOpen ? "rotate-0" : "-rotate-90"}`}
+                weight="bold"
+                aria-hidden
+              />
+              Search shortcuts
+              {shortcutCount > 0 ? (
+                <span className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-[0.65rem] normal-case tracking-normal text-muted-foreground">
+                  {shortcutCount}
+                </span>
+              ) : null}
+            </button>
+
+            {canSave ? (
+              <button
+                type="button"
+                disabled={pending}
+                onClick={onSaveSearch}
+                className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-guava-green/20 bg-white/80 px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:border-guava-green/35 disabled:opacity-50"
+              >
+                <BookmarkSimple className="size-3.5 text-guava-green" weight="duotone" />
+                Save search
+              </button>
+            ) : null}
           </div>
+
+          {shortcutsOpen ? (
+            <div id={panelId} className="mt-2 space-y-2.5">
+              {hasRecommended ? (
+                <div className="space-y-1.5">
+                  <p className="px-0.5 text-[0.65rem] font-medium uppercase tracking-wide text-muted-foreground/80">
+                    Recommended
+                  </p>
+                  <div
+                    role="tablist"
+                    aria-label="Recommended search criteria"
+                    className="flex gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                  >
+                    {recommendedCriteria.map((criterion) => (
+                      <SearchTab
+                        key={criterion.label}
+                        label={criterion.label}
+                        variant="recommended"
+                        selected={criterionMatches(
+                          activeQ,
+                          activeLocation,
+                          activeCountry,
+                          criterion,
+                        )}
+                        pending={pending}
+                        onClick={() => selectCriterion?.(criterion)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {hasSaved ? (
+                <div className="space-y-1.5">
+                  <p className="px-0.5 text-[0.65rem] font-medium uppercase tracking-wide text-muted-foreground/80">
+                    Saved
+                  </p>
+                  <div
+                    role="tablist"
+                    aria-label="Saved search criteria"
+                    className="flex gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                  >
+                    {savedSearches.map((saved) => {
+                      const criterion: SearchCriterion = {
+                        label: saved.label,
+                        q: saved.q,
+                        location: saved.location,
+                        country: saved.country,
+                      };
+                      return (
+                        <SearchTab
+                          key={saved.id}
+                          label={saved.label}
+                          variant="saved"
+                          selected={criterionMatches(
+                            activeQ,
+                            activeLocation,
+                            activeCountry,
+                            criterion,
+                          )}
+                          pending={pending}
+                          onClick={() => selectCriterion?.(criterion)}
+                          onRemove={
+                            onRemoveSaved
+                              ? () => onRemoveSaved(saved.id)
+                              : undefined
+                          }
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+
+              {!hasRecommended && !hasSaved && allowSave ? (
+                <p className="px-0.5 text-xs text-muted-foreground">
+                  Save a search to re-run it from here, or generate Market Fit on
+                  your profile for AI recommendations.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
     </form>

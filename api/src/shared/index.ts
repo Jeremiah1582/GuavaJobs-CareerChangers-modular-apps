@@ -11,6 +11,7 @@ export * from './schemas/generated-cv.schema';
 export * from './schemas/career-cv.schema';
 export * from './schemas/error.schema';
 export * from './schemas/market-fit.schema';
+export * from './schemas/cv-pdf.schema';
 
 export { FREE_AI_GENERATIONS_PER_MONTH } from './constants/freemium.constants';
 export {
@@ -20,3 +21,8 @@ export {
   isAdzunaCountryCode,
 } from './constants/adzuna-countries';
 export type { AdzunaCountryCode } from './constants/adzuna-countries';
+export {
+  CV_PDF_LAYOUTS,
+  DEFAULT_CV_PDF_LAYOUT,
+} from './constants/cv-pdf-layouts';
+export type { CvPdfLayout } from './constants/cv-pdf-layouts';

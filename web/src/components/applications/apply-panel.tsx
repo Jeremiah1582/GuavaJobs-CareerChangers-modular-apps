@@ -13,10 +13,12 @@ import { useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { apiFetch, apiFetchBlob, ApiError } from "@/api/client";
 import type { ApplicationResponse } from "@/api/types";
-import { PaperPanel } from "@/components/ui/paper-panel";
+import { PaperPanel, paperInputClass } from "@/components/ui/paper-panel";
 import { AnalyticsEvents, track } from "@/lib/analytics";
 import { applicationCompany, applicationTitle } from "@/lib/applications";
 import { getAccessToken } from "@/lib/session";
+
+type CvPdfLayout = "classic" | "modern";
 
 function ApplyConfirmSheet({
   open,
@@ -112,7 +114,8 @@ export function ApplyPanel({ app }: { app: ApplicationResponse }) {
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [cvError, setCvError] = useState<string | null>(null);
   const [pdfBusy, setPdfBusy] = useState(false);
-  const [cvBusy, setCvBusy] = useState(false);
+  const [cvBusy, setCvBusy] = useState<"pdf" | "json" | "file" | null>(null);
+  const [cvLayout, setCvLayout] = useState<CvPdfLayout>("classic");
 
   const title = applicationTitle(app);
   const company = applicationCompany(app);
@@ -177,29 +180,72 @@ export function ApplyPanel({ app }: { app: ApplicationResponse }) {
     }
   }
 
-  async function downloadCv() {
+  async function downloadCvPdf() {
     setCvError(null);
-    setCvBusy(true);
+    setCvBusy("pdf");
     try {
       const token = await getAccessToken();
-      if (useGeneratedCv) {
-        const blob = await apiFetchBlob(
-          `/applications/${app.id}/generated-cv/json`,
-          { token },
-        );
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `generated-cv-${app.id}.json`;
-        a.click();
-        URL.revokeObjectURL(url);
-      } else {
-        const payload = await apiFetch<{ signedUrl: string; fileName: string }>(
-          `/profiles/${app.profileId}/cv/download`,
-          { token },
-        );
-        window.open(payload.signedUrl, "_blank", "noopener,noreferrer");
-      }
+      const blob = await apiFetchBlob(
+        `/applications/${app.id}/generated-cv/pdf?layout=${cvLayout}`,
+        { method: "POST", token },
+      );
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `generated-cv-${app.id}-${cvLayout}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      track(AnalyticsEvents.pdf_exported, {
+        applicationId: app.id,
+        layout: cvLayout,
+      });
+    } catch (err) {
+      setCvError(
+        err instanceof ApiError
+          ? err.message
+          : "Could not download CV PDF. Try again.",
+      );
+    } finally {
+      setCvBusy(null);
+    }
+  }
+
+  async function downloadCvJson() {
+    setCvError(null);
+    setCvBusy("json");
+    try {
+      const token = await getAccessToken();
+      const blob = await apiFetchBlob(
+        `/applications/${app.id}/generated-cv/json`,
+        { token },
+      );
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `generated-cv-${app.id}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setCvError(
+        err instanceof ApiError
+          ? err.message
+          : "Could not download CV JSON. Try again.",
+      );
+    } finally {
+      setCvBusy(null);
+    }
+  }
+
+  async function downloadUploadedCv() {
+    setCvError(null);
+    setCvBusy("file");
+    try {
+      const token = await getAccessToken();
+      const payload = await apiFetch<{ signedUrl: string; fileName: string }>(
+        `/profiles/${app.profileId}/cv/download`,
+        { token },
+      );
+      window.open(payload.signedUrl, "_blank", "noopener,noreferrer");
     } catch (err) {
       setCvError(
         err instanceof ApiError
@@ -207,7 +253,7 @@ export function ApplyPanel({ app }: { app: ApplicationResponse }) {
           : "Could not download CV. Try again.",
       );
     } finally {
-      setCvBusy(false);
+      setCvBusy(null);
     }
   }
 
@@ -268,21 +314,67 @@ export function ApplyPanel({ app }: { app: ApplicationResponse }) {
             </button>
           ) : null}
 
-          {canDownloadCv ? (
+          {canDownloadCv && useGeneratedCv ? (
+            <>
+              <label className="inline-flex items-center gap-2 text-sm">
+                <span className="font-medium text-muted-foreground">
+                  Layout
+                </span>
+                <select
+                  value={cvLayout}
+                  onChange={(e) =>
+                    setCvLayout(e.target.value as CvPdfLayout)
+                  }
+                  disabled={cvBusy !== null}
+                  className={`${paperInputClass} w-auto min-w-[8.5rem] py-2`}
+                  aria-label="CV PDF layout"
+                >
+                  <option value="classic">Classic</option>
+                  <option value="modern">Modern</option>
+                </select>
+              </label>
+              <button
+                type="button"
+                disabled={cvBusy !== null}
+                onClick={() => void downloadCvPdf()}
+                className="inline-flex items-center gap-2 rounded-xl border border-guava-green/25 bg-white px-4 py-2.5 text-sm font-medium transition-colors hover:border-guava-green/45 disabled:opacity-50"
+              >
+                {cvBusy === "pdf" ? (
+                  <CircleNotch className="size-4 animate-spin" weight="bold" />
+                ) : (
+                  <FilePdf className="size-4" weight="duotone" />
+                )}
+                Download CV PDF
+              </button>
+              <button
+                type="button"
+                disabled={cvBusy !== null}
+                onClick={() => void downloadCvJson()}
+                className="inline-flex items-center gap-2 text-sm text-muted-foreground underline-offset-2 hover:underline disabled:opacity-50"
+              >
+                {cvBusy === "json" ? (
+                  <CircleNotch className="size-4 animate-spin" weight="bold" />
+                ) : (
+                  <FileCode className="size-4" weight="duotone" />
+                )}
+                Download JSON
+              </button>
+            </>
+          ) : null}
+
+          {canDownloadCv && !useGeneratedCv ? (
             <button
               type="button"
-              disabled={cvBusy}
-              onClick={() => void downloadCv()}
+              disabled={cvBusy !== null}
+              onClick={() => void downloadUploadedCv()}
               className="inline-flex items-center gap-2 rounded-xl border border-guava-green/25 bg-white px-4 py-2.5 text-sm font-medium transition-colors hover:border-guava-green/45 disabled:opacity-50"
             >
-              {cvBusy ? (
+              {cvBusy === "file" ? (
                 <CircleNotch className="size-4 animate-spin" weight="bold" />
-              ) : useGeneratedCv ? (
-                <FileCode className="size-4" weight="duotone" />
               ) : (
                 <FileText className="size-4" weight="duotone" />
               )}
-              {useGeneratedCv ? "Download CV JSON" : "Download CV file"}
+              Download CV file
             </button>
           ) : null}
 

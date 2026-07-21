@@ -9,6 +9,14 @@ export const atsTypeSchema = z.enum([
   'unknown',
 ]);
 
+export const jobSourceSchema = z.enum(['adzuna', 'ats_direct']);
+
+/** Adzuna ToS when any Adzuna-sourced row is present; else curated-only. */
+export const jobAttributionSchema = z.enum([
+  'Jobs by Adzuna',
+  'Company career pages',
+]);
+
 export const adzunaCountrySchema = z.enum(ADZUNA_COUNTRY_CODES);
 
 export const jobListItemSchema = z.object({
@@ -21,6 +29,7 @@ export const jobListItemSchema = z.object({
   atsType: atsTypeSchema,
   hasFullDescription: z.boolean(),
   applyType: z.enum(['url', 'unknown']),
+  source: jobSourceSchema.optional(),
   salaryMin: z.number().nullable().optional(),
   salaryMax: z.number().nullable().optional(),
   salaryCurrency: z.string().nullable().optional(),
@@ -29,7 +38,7 @@ export const jobListItemSchema = z.object({
 
 export const unifiedJobSchema = jobListItemSchema.extend({
   description: z.string(),
-  source: z.literal('adzuna'),
+  source: jobSourceSchema,
   fetchedAt: z.string().datetime(),
   adzunaId: z.string().optional(),
   adzunaCountry: z.string().optional(),
@@ -39,7 +48,7 @@ export const jobSearchResponseSchema = z.object({
   results: z.array(jobListItemSchema),
   page: z.number().int().positive(),
   totalResults: z.number().int().nonnegative(),
-  attribution: z.literal('Jobs by Adzuna'),
+  attribution: jobAttributionSchema,
 });
 
 export const jobSearchQuerySchema = z.object({
@@ -53,3 +62,5 @@ export type JobListItem = z.infer<typeof jobListItemSchema>;
 export type UnifiedJob = z.infer<typeof unifiedJobSchema>;
 export type JobSearchResponse = z.infer<typeof jobSearchResponseSchema>;
 export type JobSearchQuery = z.infer<typeof jobSearchQuerySchema>;
+export type JobSource = z.infer<typeof jobSourceSchema>;
+export type JobAttribution = z.infer<typeof jobAttributionSchema>;

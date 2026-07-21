@@ -1,0 +1,122 @@
+[
+  {
+    "atsType": "greenhouse",
+    "board": "stripe",
+    "company": "Stripe",
+    "countries": ["gb", "ie", "nl", "de", "fr"]
+  },
+  {
+    "atsType": "greenhouse",
+    "board": "monzo",
+    "company": "Monzo",
+    "countries": ["gb", "ie"]
+  },
+  {
+    "atsType": "greenhouse",
+    "board": "deliveroo",
+    "company": "Deliveroo",
+    "countries": ["gb", "ie", "nl", "fr"]
+  },
+  {
+    "atsType": "greenhouse",
+    "board": "intercom",
+    "company": "Intercom",
+    "countries": ["gb", "ie", "nl", "de"]
+  },
+  {
+    "atsType": "greenhouse",
+    "board": "transferwise",
+    "company": "Wise",
+    "countries": ["gb", "ie", "nl", "de", "fr", "es"]
+  },
+  {
+    "atsType": "greenhouse",
+    "board": "cloudflare",
+    "company": "Cloudflare",
+    "countries": ["gb", "nl", "de", "fr"]
+  },
+  {
+    "atsType": "greenhouse",
+    "board": "shopify",
+    "company": "Shopify",
+    "countries": ["gb", "ie", "nl", "de"]
+  },
+  {
+    "atsType": "greenhouse",
+    "board": "figma",
+    "company": "Figma",
+    "countries": ["gb", "nl", "de"]
+  },
+  {
+    "atsType": "greenhouse",
+    "board": "gitlab",
+    "company": "GitLab",
+    "countries": ["gb", "nl", "de", "ie"]
+  },
+  {
+    "atsType": "greenhouse",
+    "board": "hashicorp",
+    "company": "HashiCorp",
+    "countries": ["gb", "nl", "de"]
+  },
+  {
+    "atsType": "lever",
+    "board": "spotify",
+    "company": "Spotify",
+    "countries": ["gb", "nl", "de", "se"]
+  },
+  {
+    "atsType": "lever",
+    "board": "netflix",
+    "company": "Netflix",
+    "countries": ["gb", "nl", "de"]
+  },
+  {
+    "atsType": "lever",
+    "board": "canva",
+    "company": "Canva",
+    "countries": ["gb", "ie", "nl", "de"]
+  },
+  {
+    "atsType": "lever",
+    "board": "grammarly",
+    "company": "Grammarly",
+    "countries": ["gb", "nl", "de"]
+  },
+  {
+    "atsType": "lever",
+    "board": "palantir",
+    "company": "Palantir",
+    "countries": ["gb", "nl", "de"]
+  },
+  {
+    "atsType": "ashby",
+    "board": "linear",
+    "company": "Linear",
+    "countries": ["gb", "nl", "de"]
+  },
+  {
+    "atsType": "ashby",
+    "board": "ramp",
+    "company": "Ramp",
+    "countries": ["gb", "nl"]
+  },
+  {
+    "atsType": "ashby",
+    "board": "retool",
+    "company": "Retool",
+    "countries": ["gb", "nl", "de"]
+  },
+  {
+    "atsType": "ashby",
+    "board": "mercury",
+    "company": "Mercury",
+    "countries": ["gb", "nl"]
+  },
+  {
+    "atsType": "ashby",
+    "board": "vercel",
+    "company": "Vercel",
+    "countries": ["gb", "nl", "de"]
+  }
+]

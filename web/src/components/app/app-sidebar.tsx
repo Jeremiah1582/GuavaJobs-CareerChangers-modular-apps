@@ -31,7 +31,7 @@ function isActive(pathname: string, href: string): boolean {
 }
 
 const sidebarWash =
-  "bg-gradient-to-b from-[oklch(0.74_0.16_12)] via-[oklch(0.64_0.19_12)] to-[oklch(0.52_0.17_18)]";
+  "bg-gradient-to-b from-[oklch(0.52_0.13_12)] via-[oklch(0.42_0.14_14)] to-[oklch(0.28_0.10_20)]";
 
 /** Expanded rail widths scale with viewport (tablet → desktop). */
 const EXPANDED =
@@ -105,7 +105,7 @@ export function AppSidebar() {
   return (
     <aside
       className={[
-        "fixed inset-y-0 left-0 z-40 hidden flex-col text-white shadow-[8px_0_40px_-20px_color-mix(in_oklab,var(--guava-pink)_55%,transparent)] sm:flex",
+        "fixed inset-y-0 left-0 z-40 hidden flex-col text-white shadow-[8px_0_48px_-24px_color-mix(in_oklab,var(--guava-pink)_32%,transparent),inset_0_1px_0_oklch(1_0_0_/_0.06)] sm:flex",
         sidebarWash,
         "transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
         collapsed ? COLLAPSED : EXPANDED,
@@ -116,7 +116,7 @@ export function AppSidebar() {
     >
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-[linear-gradient(160deg,oklch(1_0_0_/_0.18)_0%,transparent_42%,oklch(0_0_0_/_0.08)_100%)]"
+        className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,oklch(1_0_0_/_0.07)_0%,transparent_38%,oklch(0_0_0_/_0.16)_100%)]"
       />
 
       <div className="relative flex h-full flex-col px-2 py-4 md:px-3 md:py-5">

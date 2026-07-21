@@ -49,6 +49,14 @@ export function JobCard({ job, isSelected = false, onSelect }: JobCardProps) {
           </span>
         ) : null}
         {salary ? <span className="truncate">{salary}</span> : null}
+        {job.hasFullDescription &&
+        (job.atsType === "greenhouse" ||
+          job.atsType === "lever" ||
+          job.atsType === "ashby") ? (
+          <span className="rounded-md bg-guava-green/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-guava-green">
+            Full JD
+          </span>
+        ) : null}
       </div>
 
       {!isSelected && job.snippet ? (

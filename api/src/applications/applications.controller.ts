@@ -31,6 +31,10 @@ import {
   hybridGenerateCvSchema,
 } from '../shared/schemas/application.schema';
 import {
+  generatedCvPdfQuerySchema,
+  GeneratedCvPdfQuery,
+} from '../shared/schemas/cv-pdf.schema';
+import {
   addressGapSchema,
   AddressGapInput,
   improveGapSchema,
@@ -211,6 +215,49 @@ export class ApplicationsController {
     res.send(JSON.stringify(payload, null, 2));
   }
 
+  @Post(':id/generated-cv/pdf')
+  @ApiOperation({
+    summary: 'Stream generated CV PDF (layout at download; never stored)',
+  })
+  async generatedCvPdf(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Query(new ZodValidationPipe(generatedCvPdfQuerySchema))
+    query: GeneratedCvPdfQuery,
+    @Res() res: Response,
+  ) {
+    const app = await this.prisma.application.findFirst({
+      where: { id, userId: user.id },
+      select: { cvChoice: true },
+    });
+    if (!app) {
+      throw new AppError('APPLICATION_NOT_FOUND', 'Application not found', 404);
+    }
+    if (app.cvChoice !== 'GENERATED') {
+      throw new AppError(
+        'INVALID_OPERATION',
+        'Switch CV choice to Generated before downloading a tailored CV PDF',
+        400,
+      );
+    }
+
+    const payload = await this.applications.getHydratedGeneratedCvExport(
+      user.id,
+      id,
+    );
+    const buffer = await this.pdf.generatedCvPdf({
+      content: payload,
+      layout: query.layout,
+    });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="generated-cv-${id}-${query.layout}.pdf"`,
+    );
+    res.send(buffer);
+  }
+
   @Post(':id/cover-letter/pdf')
   @ApiOperation({ summary: 'Stream cover letter PDF (never stored)' })
   async coverLetterPdf(
@@ -220,7 +267,7 @@ export class ApplicationsController {
   ) {
     const app = await this.prisma.application.findFirst({
       where: { id, userId: user.id },
-      include: { user: true },
+      include: { user: true, profile: true },
     });
     if (!app?.coverLetterContent) {
       throw new AppError(
@@ -232,6 +279,8 @@ export class ApplicationsController {
 
     const buffer = await this.pdf.coverLetterPdf({
       applicantName: app.user.name,
+      email: app.user.email,
+      phone: app.profile?.contactPhone ?? undefined,
       coverLetter: app.coverLetterContent,
       companyName: app.companyName ?? undefined,
       jobTitle: app.jobRoleTitle ?? undefined,
