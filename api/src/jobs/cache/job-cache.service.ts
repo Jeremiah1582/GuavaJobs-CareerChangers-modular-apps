@@ -5,6 +5,7 @@ import {
   JobSearchResponse,
   UnifiedJob,
 } from '../../shared/schemas/job.schema';
+import { ensurePlainJobDescription } from '../ats/strip-html.util';
 
 const JOB_DETAIL_TTL_SECONDS = 30 * 60;
 /** Curated ATS postings refreshed on sync; keep longer between runs. */
@@ -25,7 +26,7 @@ export class JobCacheService {
     if (!raw) {
       return null;
     }
-    return JSON.parse(raw) as UnifiedJob;
+    return sanitizeCachedJob(JSON.parse(raw) as UnifiedJob);
   }
 
   async setJob(
@@ -45,7 +46,7 @@ export class JobCacheService {
     if (!raw) {
       return null;
     }
-    return JSON.parse(raw) as JobSearchResponse;
+    return sanitizeCachedSearch(JSON.parse(raw) as JobSearchResponse);
   }
 
   async setSearch(cacheKey: string, response: JobSearchResponse): Promise<void> {
@@ -158,4 +159,36 @@ export class JobCacheService {
   private searchKey(hash: string): string {
     return `jobs:search:${hash}`;
   }
+}
+
+function sanitizeCachedJob(job: UnifiedJob): UnifiedJob {
+  const description = ensurePlainJobDescription(job.description ?? '');
+  if (description === (job.description ?? '')) {
+    return job;
+  }
+  return {
+    ...job,
+    description,
+    snippet: description.slice(0, 280) || job.snippet,
+    hasFullDescription:
+      description.length > 100 ? true : job.hasFullDescription,
+  };
+}
+
+function sanitizeCachedSearch(response: JobSearchResponse): JobSearchResponse {
+  return {
+    ...response,
+    results: response.results.map((item) => {
+      const snippet = ensurePlainJobDescription(item.snippet ?? '');
+      if (snippet === (item.snippet ?? '')) {
+        return item;
+      }
+      return {
+        ...item,
+        snippet: snippet.slice(0, 280),
+        hasFullDescription:
+          snippet.length > 100 ? true : item.hasFullDescription,
+      };
+    }),
+  };
 }

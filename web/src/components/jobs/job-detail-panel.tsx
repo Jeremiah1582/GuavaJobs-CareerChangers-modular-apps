@@ -263,7 +263,7 @@ export function JobDetailPanel({
               </div>
             </div>
           ) : effectiveDescription ? (
-            <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3 text-sm leading-relaxed text-foreground whitespace-pre-wrap">
+            <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3 text-sm leading-relaxed text-foreground whitespace-pre-wrap [overflow-wrap:anywhere]">
               {effectiveDescription}
             </div>
           ) : (
