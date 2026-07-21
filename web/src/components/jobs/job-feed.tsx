@@ -14,6 +14,7 @@ import { JobsSearchBar } from "@/components/jobs/jobs-search-bar";
 import { ErrorState } from "@/components/ui/state-panel";
 import { AnalyticsEvents, track } from "@/lib/analytics";
 import { deriveJobSearchDefaults } from "@/lib/jobs";
+import { normalizeAdzunaCountry } from "@/lib/adzuna-countries";
 import { useOnlineStatus } from "@/lib/online";
 import { getAccessTokenOrNull } from "@/lib/session";
 
@@ -44,8 +45,8 @@ function readUrlSearch(searchParams: URLSearchParams): {
     where,
     country,
     page,
-    /** Custom search when keywords or location are in the URL. */
-    hasExplicit: q !== null || where !== null,
+    /** Custom search when keywords, location, or country are in the URL. */
+    hasExplicit: q !== null || where !== null || country !== null,
   };
 }
 
@@ -60,10 +61,13 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
 
   const [query, setQuery] = useState(urlSearch.q ?? "");
   const [location, setLocation] = useState(urlSearch.where ?? "");
+  const [country, setCountry] = useState(
+    normalizeAdzunaCountry(urlSearch.country),
+  );
   const [submitted, setSubmitted] = useState<SubmittedSearch>({
     q: urlSearch.q ?? "",
     location: urlSearch.where ?? "",
-    country: (urlSearch.country ?? "gb").toLowerCase(),
+    country: normalizeAdzunaCountry(urlSearch.country),
     page: urlSearch.page,
   });
 
@@ -105,10 +109,11 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
     if (defaults) {
       setQuery(defaults.q);
       setLocation(defaults.location);
+      setCountry(normalizeAdzunaCountry(defaults.country));
       setSubmitted({
         q: defaults.q,
         location: defaults.location,
-        country: defaults.country,
+        country: normalizeAdzunaCountry(defaults.country),
         page: 1,
       });
     }
@@ -168,7 +173,7 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
 
       if (q.trim()) params.set("q", q.trim());
       if (loc.trim()) params.set("where", loc.trim());
-      if (country && country !== "gb") params.set("country", country);
+      if (country) params.set("country", country);
       if (page > 1) params.set("page", String(page));
       if (job) params.set("job", job);
 
@@ -190,7 +195,7 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
     const next: SubmittedSearch = {
       q: query,
       location,
-      country: submitted.country,
+      country: normalizeAdzunaCountry(country),
       page: 1,
     };
     setSubmitted(next);
@@ -198,6 +203,7 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
     track(AnalyticsEvents.job_search, {
       q: query.trim() || null,
       location: location.trim() || null,
+      country: next.country,
       page: 1,
     });
   }
@@ -225,16 +231,65 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
     awaitingDefaults ||
     (searchQuery.isFetching && !searchQuery.isFetched);
 
+  const pagination =
+    data && data.results.length > 0 ? (
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <button
+          type="button"
+          disabled={submitted.page <= 1 || searchQuery.isFetching}
+          onClick={() => {
+            const page = Math.max(1, submitted.page - 1);
+            setSubmitted((s) => ({ ...s, page }));
+            syncUrl({ page, job: null });
+          }}
+          className="rounded-lg border border-guava-green/20 bg-white/80 px-3 py-1.5 text-sm font-medium disabled:opacity-40"
+        >
+          Previous
+        </button>
+        <span className="font-mono text-xs text-muted-foreground">
+          {submitted.page} / {totalPages}
+        </span>
+        <button
+          type="button"
+          disabled={submitted.page >= totalPages || searchQuery.isFetching}
+          onClick={() => {
+            const page = submitted.page + 1;
+            setSubmitted((s) => ({ ...s, page }));
+            syncUrl({ page, job: null });
+          }}
+          className="rounded-lg border border-guava-green/20 bg-white/80 px-3 py-1.5 text-sm font-medium disabled:opacity-40"
+        >
+          Next
+        </button>
+      </div>
+    ) : null;
+
+  const desktopBoardFooter =
+    pagination || data?.attribution ? (
+      <>
+        {pagination}
+        {data?.attribution ? (
+          <p className="text-center text-xs text-muted-foreground">
+            {data.attribution}
+          </p>
+        ) : null}
+      </>
+    ) : null;
+
   return (
-    <div className="flex min-h-0 flex-col gap-5">
-      <JobsSearchBar
-        query={query}
-        location={location}
-        onQueryChange={setQuery}
-        onLocationChange={setLocation}
-        onSubmit={onSearch}
-        pending={searchPending}
-      />
+    <div className="flex min-h-0 w-full min-w-0 max-w-full flex-col gap-5 overflow-x-hidden lg:min-h-0 lg:flex-1 lg:gap-4 lg:overflow-hidden">
+      <div className="min-w-0 shrink-0">
+        <JobsSearchBar
+          query={query}
+          location={location}
+          country={country}
+          onQueryChange={setQuery}
+          onLocationChange={setLocation}
+          onCountryChange={(value) => setCountry(normalizeAdzunaCountry(value))}
+          onSubmit={onSearch}
+          pending={searchPending}
+        />
+      </div>
 
       {!online ? (
         <ErrorState
@@ -262,7 +317,7 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
       ) : (
         <>
           {data && data.results.length > 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="shrink-0 text-sm text-muted-foreground">
               <span className="font-medium text-foreground">
                 {data.totalResults.toLocaleString()}
               </span>{" "}
@@ -282,44 +337,13 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
             onClear={clearSelection}
             mode={mode}
             emptyMessage={`Try broader keywords or a different location. Searching ${marketLabel}.`}
+            footer={desktopBoardFooter}
           />
 
-          {data && data.results.length > 0 ? (
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <button
-                type="button"
-                disabled={submitted.page <= 1 || searchQuery.isFetching}
-                onClick={() => {
-                  const page = Math.max(1, submitted.page - 1);
-                  setSubmitted((s) => ({ ...s, page }));
-                  syncUrl({ page, job: null });
-                }}
-                className="rounded-lg border border-guava-green/20 bg-white/80 px-3 py-1.5 text-sm font-medium disabled:opacity-40"
-              >
-                Previous
-              </button>
-              <span className="font-mono text-xs text-muted-foreground">
-                {submitted.page} / {totalPages}
-              </span>
-              <button
-                type="button"
-                disabled={
-                  submitted.page >= totalPages || searchQuery.isFetching
-                }
-                onClick={() => {
-                  const page = submitted.page + 1;
-                  setSubmitted((s) => ({ ...s, page }));
-                  syncUrl({ page, job: null });
-                }}
-                className="rounded-lg border border-guava-green/20 bg-white/80 px-3 py-1.5 text-sm font-medium disabled:opacity-40"
-              >
-                Next
-              </button>
-            </div>
-          ) : null}
+          {pagination ? <div className="lg:hidden">{pagination}</div> : null}
 
           {data?.attribution ? (
-            <p className="text-center text-xs text-muted-foreground">
+            <p className="text-center text-xs text-muted-foreground lg:hidden">
               {data.attribution}
             </p>
           ) : null}

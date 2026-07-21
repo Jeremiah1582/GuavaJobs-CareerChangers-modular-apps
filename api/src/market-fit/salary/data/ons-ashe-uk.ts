@@ -1,0 +1,362 @@
+/**
+ * Bundled UK earnings benchmarks derived from ONS ASHE-style occupation tables
+ * (annual gross, full-time approximate p25 / median / p75 in GBP).
+ *
+ * Source framing: Office for National Statistics, Annual Survey of Hours and Earnings
+ * (Open Government Licence v3.0). Figures are rounded illustrative medians for product
+ * guidance — refresh periodically from official ASHE releases.
+ *
+ * https://www.ons.gov.uk/ashe
+ */
+export type OnsAsheOccupation = {
+  soc: string;
+  title: string;
+  aliases: string[];
+  p25: number;
+  median: number;
+  p75: number;
+};
+
+export const ONS_ASHE_UK: OnsAsheOccupation[] = [
+  {
+    soc: '2136',
+    title: 'Programmers and software development professionals',
+    aliases: [
+      'software engineer',
+      'software developer',
+      'full stack developer',
+      'backend developer',
+      'frontend developer',
+      'web developer',
+      'application developer',
+    ],
+    p25: 38000,
+    median: 52000,
+    p75: 70000,
+  },
+  {
+    soc: '2135',
+    title: 'IT business analysts, architects and systems designers',
+    aliases: [
+      'solutions architect',
+      'solution architect',
+      'systems architect',
+      'enterprise architect',
+      'business analyst',
+      'it business analyst',
+      'systems analyst',
+    ],
+    p25: 45000,
+    median: 62000,
+    p75: 85000,
+  },
+  {
+    soc: '2134',
+    title: 'IT project and programme managers',
+    aliases: [
+      'project manager',
+      'programme manager',
+      'program manager',
+      'delivery manager',
+      'it project manager',
+      'technical project manager',
+    ],
+    p25: 42000,
+    median: 56000,
+    p75: 75000,
+  },
+  {
+    soc: '2139',
+    title: 'Information technology and telecommunications professionals n.e.c.',
+    aliases: [
+      'devops engineer',
+      'site reliability engineer',
+      'cloud engineer',
+      'platform engineer',
+      'infrastructure engineer',
+      'sre',
+    ],
+    p25: 42000,
+    median: 58000,
+    p75: 78000,
+  },
+  {
+    soc: '2133',
+    title: 'IT specialist managers',
+    aliases: [
+      'engineering manager',
+      'engineering lead',
+      'tech lead',
+      'technical lead',
+      'head of engineering',
+      'it manager',
+    ],
+    p25: 52000,
+    median: 72000,
+    p75: 95000,
+  },
+  {
+    soc: '2421',
+    title: 'Management consultants and business analysts',
+    aliases: [
+      'management consultant',
+      'strategy consultant',
+      'business consultant',
+      'operations analyst',
+      'management analyst',
+    ],
+    p25: 36000,
+    median: 48000,
+    p75: 68000,
+  },
+  {
+    soc: '3545',
+    title: 'Sales accounts and business development managers',
+    aliases: [
+      'account executive',
+      'account manager',
+      'business development manager',
+      'sales manager',
+      'bdr',
+      'sdr',
+      'sales development representative',
+    ],
+    p25: 32000,
+    median: 45000,
+    p75: 65000,
+  },
+  {
+    soc: '3543',
+    title: 'Marketing associate professionals',
+    aliases: [
+      'marketing manager',
+      'marketing executive',
+      'digital marketing manager',
+      'growth marketer',
+      'product marketing manager',
+      'content marketing manager',
+    ],
+    p25: 28000,
+    median: 38000,
+    p75: 52000,
+  },
+  {
+    soc: '2137',
+    title: 'Web design and development professionals',
+    aliases: [
+      'ux designer',
+      'ui designer',
+      'product designer',
+      'ux/ui designer',
+      'interaction designer',
+      'web designer',
+    ],
+    p25: 32000,
+    median: 44000,
+    p75: 58000,
+  },
+  {
+    soc: '2423',
+    title: 'Management consultants and business analysts (product)',
+    aliases: [
+      'product manager',
+      'product owner',
+      'associate product manager',
+      'technical product manager',
+    ],
+    p25: 42000,
+    median: 58000,
+    p75: 78000,
+  },
+  {
+    soc: '2425',
+    title: 'Actuaries, economists and statisticians',
+    aliases: [
+      'data analyst',
+      'data scientist',
+      'business intelligence analyst',
+      'bi analyst',
+      'analytics engineer',
+      'statistician',
+    ],
+    p25: 34000,
+    median: 46000,
+    p75: 62000,
+  },
+  {
+    soc: '2426',
+    title: 'Business and related research professionals',
+    aliases: [
+      'research analyst',
+      'market research analyst',
+      'insights analyst',
+      'user researcher',
+    ],
+    p25: 30000,
+    median: 40000,
+    p75: 52000,
+  },
+  {
+    soc: '3538',
+    title: 'Financial accounts managers',
+    aliases: [
+      'finance manager',
+      'financial analyst',
+      'accountant',
+      'management accountant',
+      'fp&a analyst',
+    ],
+    p25: 34000,
+    median: 46000,
+    p75: 62000,
+  },
+  {
+    soc: '3562',
+    title: 'Human resources and industrial relations officers',
+    aliases: [
+      'hr manager',
+      'hr business partner',
+      'people partner',
+      'talent acquisition',
+      'recruiter',
+      'people operations',
+    ],
+    p25: 30000,
+    median: 40000,
+    p75: 55000,
+  },
+  {
+    soc: '1135',
+    title: 'Human resource managers and directors',
+    aliases: ['head of people', 'hr director', 'chief people officer'],
+    p25: 55000,
+    median: 75000,
+    p75: 100000,
+  },
+  {
+    soc: '2471',
+    title: 'Journalists, newspaper and periodical editors',
+    aliases: [
+      'content writer',
+      'technical writer',
+      'copywriter',
+      'editor',
+      'communications manager',
+    ],
+    p25: 26000,
+    median: 35000,
+    p75: 45000,
+  },
+  {
+    soc: '3544',
+    title: 'Estate agents and auctioneers',
+    aliases: ['customer success manager', 'customer support manager'],
+    p25: 28000,
+    median: 38000,
+    p75: 52000,
+  },
+  {
+    soc: '4159',
+    title: 'Other administrative occupations n.e.c.',
+    aliases: [
+      'operations coordinator',
+      'operations manager',
+      'office manager',
+      'executive assistant',
+      'admin assistant',
+    ],
+    p25: 24000,
+    median: 32000,
+    p75: 42000,
+  },
+  {
+    soc: '2112',
+    title: 'Biological scientists and biochemists',
+    aliases: ['qa engineer', 'quality assurance engineer', 'test engineer'],
+    p25: 32000,
+    median: 42000,
+    p75: 55000,
+  },
+  {
+    soc: '2131',
+    title: 'IT operations technicians',
+    aliases: [
+      'it support',
+      'support engineer',
+      'helpdesk',
+      'service desk analyst',
+      'systems administrator',
+    ],
+    p25: 26000,
+    median: 34000,
+    p75: 44000,
+  },
+  {
+    soc: '3542',
+    title: 'Business sales executives',
+    aliases: [
+      'sales executive',
+      'inside sales',
+      'commercial manager',
+      'partnerships manager',
+    ],
+    p25: 28000,
+    median: 38000,
+    p75: 55000,
+  },
+  {
+    soc: '2126',
+    title: 'Design and development engineers',
+    aliases: [
+      'hardware engineer',
+      'electronics engineer',
+      'embedded engineer',
+      'systems engineer',
+    ],
+    p25: 36000,
+    median: 48000,
+    p75: 65000,
+  },
+  {
+    soc: '2424',
+    title: 'Business and financial project management professionals',
+    aliases: [
+      'scrum master',
+      'agile coach',
+      'change manager',
+      'transformation manager',
+    ],
+    p25: 40000,
+    median: 54000,
+    p75: 72000,
+  },
+  {
+    soc: '3534',
+    title: 'Finance and investment analysts and advisers',
+    aliases: [
+      'investment analyst',
+      'risk analyst',
+      'compliance analyst',
+      'credit analyst',
+    ],
+    p25: 35000,
+    median: 48000,
+    p75: 68000,
+  },
+  {
+    soc: '3541',
+    title: 'Buyers and procurement officers',
+    aliases: [
+      'procurement manager',
+      'buyer',
+      'supply chain analyst',
+      'supply chain manager',
+    ],
+    p25: 30000,
+    median: 40000,
+    p75: 55000,
+  },
+];
+
+export const ONS_ASHE_ATTRIBUTION =
+  'UK salary bands based on ONS ASHE occupation earnings (Open Government Licence).';

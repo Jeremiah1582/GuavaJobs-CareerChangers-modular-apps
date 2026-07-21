@@ -54,6 +54,8 @@ export type ProfileResponse = {
   seniority: SeniorityLevel;
   primaryIndustry: ProfileIndustry;
   currentCvId: string | null;
+  skills?: string[];
+  summary?: string | null;
   locationCity?: string | null;
   locationCountry?: string | null;
 };
@@ -330,6 +332,40 @@ export type CreateManualApplicationBody = {
   applyUrl?: string;
   pastedJobDescription?: string;
   status?: ApplicationStatus;
+};
+
+export type MarketFitResponse = {
+  profileId: string;
+  regionCountry: string;
+  currency: string;
+  generatedAt: string;
+  inputFingerprint: string;
+  stale?: boolean;
+  paywall: {
+    enabled: boolean;
+    message: string | null;
+  };
+  roles: Array<{
+    title: string;
+    fitLevel: "strong" | "adjacent" | "stretch";
+    whyFit: string;
+    evidenceSkills: string[];
+    salary: {
+      min: number;
+      max: number;
+      median?: number;
+      period: "year";
+      currency: string;
+      source: "ons_ashe" | "eurosalary";
+      label: string;
+    } | null;
+    searchCta: {
+      q: string;
+      country: string;
+      location?: string;
+    };
+  }>;
+  attribution: string[];
 };
 
 export function isGeneratingStatus(

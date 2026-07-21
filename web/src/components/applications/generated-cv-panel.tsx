@@ -22,7 +22,12 @@ import type {
 import { QuotaSheet } from "@/components/applications/quota-sheet";
 import { PaperPanel, paperInputClass } from "@/components/ui/paper-panel";
 import { AnalyticsEvents, track } from "@/lib/analytics";
-import { effectiveJobDescription } from "@/lib/applications";
+import { effectiveJobDescription, applicationTitle } from "@/lib/applications";
+import {
+  requestGenerationNotificationPermission,
+  watchGeneration,
+} from "@/lib/generation-watch";
+import { useGenerationWatch } from "@/lib/use-generation-watch";
 import { getAccessToken } from "@/lib/session";
 
 function Section({
@@ -624,84 +629,10 @@ export function GenerateTailoredCvButton({
   const queryClient = useQueryClient();
   const [quotaOpen, setQuotaOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [awaitingCv, setAwaitingCv] = useState(false);
-  /** Snapshot of generatedCv.updatedAt when generation started (null = none yet). */
-  const cvBaselineRef = useRef<string | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const startedAtRef = useRef<number>(0);
+  const awaitingCv = useGenerationWatch(app.id, "cv");
 
   const jd = effectiveJobDescription(app);
   const jdOk = jd.trim().length >= 50;
-
-  useEffect(() => {
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!awaitingCv) return;
-
-    let cancelled = false;
-    const baseline = cvBaselineRef.current;
-    const CV_POLL_TIMEOUT_MS = 90_000;
-
-    function stopAwaiting() {
-      setAwaitingCv(false);
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
-    }
-
-    async function pollOnce() {
-      try {
-        if (Date.now() - startedAtRef.current >= CV_POLL_TIMEOUT_MS) {
-          if (!cancelled) {
-            setError(
-              "Tailored CV is taking longer than expected. Try again in a moment.",
-            );
-            stopAwaiting();
-          }
-          return;
-        }
-
-        const token = await getAccessToken();
-        const fresh = await apiFetch<ApplicationResponse>(
-          `/applications/${app.id}`,
-          { token },
-        );
-        if (cancelled) return;
-
-        queryClient.setQueryData(["application", app.id], fresh);
-
-        const nextUpdated = fresh.generatedCv?.updatedAt ?? null;
-        const ready =
-          !!fresh.generatedCv?.content &&
-          (baseline == null
-            ? true
-            : nextUpdated != null && nextUpdated !== baseline);
-
-        if (ready) {
-          stopAwaiting();
-          return;
-        }
-      } catch {
-        // Keep polling — transient network errors should not abort.
-      }
-    }
-
-    void pollOnce();
-    pollRef.current = setInterval(() => void pollOnce(), 2000);
-
-    return () => {
-      cancelled = true;
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
-    };
-  }, [awaitingCv, app.id, queryClient]);
 
   const cvMutation = useMutation({
     mutationFn: async () => {
@@ -727,16 +658,19 @@ export function GenerateTailoredCvButton({
     },
     onSuccess: (data) => {
       setError(null);
-      // Capture baseline before any poll so a re-generate waits for a new CV.
-      cvBaselineRef.current = app.generatedCv?.updatedAt ?? null;
-      startedAtRef.current = Date.now();
+      void requestGenerationNotificationPermission();
+      watchGeneration({
+        id: app.id,
+        kind: "cv",
+        title: applicationTitle(app),
+        baselineAt: app.generatedCv?.updatedAt ?? null,
+      });
       queryClient.setQueryData(["application", app.id], data);
       track(AnalyticsEvents.generate_started, {
         applicationId: data.id,
         mode: "hybrid_generate_cv",
       });
       void queryClient.invalidateQueries({ queryKey: ["me"] });
-      setAwaitingCv(true);
     },
     onError: (err) => {
       if (err instanceof ApiError && err.code === "QUOTA_EXCEEDED") {

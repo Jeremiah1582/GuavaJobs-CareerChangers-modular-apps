@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ADZUNA_COUNTRY_CODES } from '../constants/adzuna-countries';
 
 export const atsTypeSchema = z.enum([
   'greenhouse',
@@ -7,6 +8,8 @@ export const atsTypeSchema = z.enum([
   'adzuna',
   'unknown',
 ]);
+
+export const adzunaCountrySchema = z.enum(ADZUNA_COUNTRY_CODES);
 
 export const jobListItemSchema = z.object({
   canonicalKey: z.string(),
@@ -42,7 +45,7 @@ export const jobSearchResponseSchema = z.object({
 export const jobSearchQuerySchema = z.object({
   q: z.string().max(200).optional(),
   location: z.string().max(200).optional(),
-  country: z.string().length(2).optional(),
+  country: adzunaCountrySchema.optional(),
   page: z.coerce.number().int().positive().default(1),
 });
 

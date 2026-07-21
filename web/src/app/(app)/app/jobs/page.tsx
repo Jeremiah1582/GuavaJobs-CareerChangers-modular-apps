@@ -18,8 +18,8 @@ function JobsFallback() {
 
 export default function JobsPage() {
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-col px-3 py-4 sm:px-4 sm:py-6 md:px-8 md:py-8">
-      <header className="mb-4 shrink-0 space-y-1 sm:mb-5">
+    <main className="mx-auto box-border flex w-full min-w-0 max-w-full flex-col overflow-x-hidden px-3 py-4 sm:px-4 sm:py-6 md:max-w-6xl md:px-8 md:py-8 lg:h-[100dvh] lg:max-h-[100dvh] lg:min-h-0 lg:overflow-hidden lg:py-6">
+      <header className="mb-4 min-w-0 shrink-0 space-y-1 sm:mb-5">
         <p className="text-xs font-medium uppercase tracking-widest text-guava-green">
           Jobs
         </p>
@@ -31,9 +31,11 @@ export default function JobsPage() {
         </p>
       </header>
 
-      <Suspense fallback={<JobsFallback />}>
-        <JobFeed />
-      </Suspense>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden">
+        <Suspense fallback={<JobsFallback />}>
+          <JobFeed />
+        </Suspense>
+      </div>
     </main>
   );
 }

@@ -40,18 +40,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div
-      className="flex min-h-[100dvh]"
+      className="flex min-h-[100dvh] w-full min-w-0 max-w-full overflow-x-hidden"
       style={{ background: "var(--wash-hero)" }}
     >
       <AppSidebar />
       <AppSidebarSpacer />
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      {/* w-0 flex-1 keeps this column inside leftover width beside the sidebar */}
+      <div className="flex w-0 min-w-0 flex-1 flex-col overflow-x-hidden">
         <OfflineBanner online={online} />
         <GenerationWatchProvider />
 
         {/* Phone-only top bar */}
-        <header className="sticky top-0 z-40 border-b border-guava-green/10 bg-white/80 backdrop-blur-md sm:hidden">
+        <header className="sticky top-0 z-40 shrink-0 border-b border-guava-green/10 bg-white/80 backdrop-blur-md sm:hidden">
           <div className="flex items-center justify-between gap-4 px-4 py-3">
             <Link
               href="/app"
@@ -64,7 +65,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        <div className="min-w-0 flex-1 pb-[calc(4.25rem+env(safe-area-inset-bottom))] sm:pb-0">
+        <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-x-hidden pb-[calc(4.25rem+env(safe-area-inset-bottom))] sm:pb-0">
           {children}
         </div>
 

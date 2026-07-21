@@ -37,6 +37,19 @@ export const envSchema = z
       .string()
       .optional()
       .transform((v) => v === 'True' || v === 'true' || v === '1'),
+    EUROSALARY_API_KEY: z.string().optional(),
+    MARKET_FIT_ENABLED: z
+      .string()
+      .optional()
+      .transform((v) =>
+        v === undefined || v === ''
+          ? true
+          : v === 'True' || v === 'true' || v === '1',
+      ),
+    MARKET_FIT_PAYWALL_ENABLED: z
+      .string()
+      .optional()
+      .transform((v) => v === 'True' || v === 'true' || v === '1'),
   })
   .refine(
     (env) => Boolean(env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SECRET_KEY),

@@ -19,6 +19,7 @@ import { AppPageShell } from "@/components/app/app-page-shell";
 import { FreemiumLimitCard } from "@/components/app/freemium-limit-card";
 import { QuotaChip } from "@/components/app/quota-chip";
 import { ProfileAtsEasyRead } from "@/components/profile/profile-ats-easy-read";
+import { MarketFitPanel } from "@/components/profile/market-fit-panel";
 import {
   PaperPanel,
   paperInputClass,
@@ -33,6 +34,7 @@ import {
   type ProfileIndustry,
   type SeniorityLevel,
 } from "@/lib/onboarding";
+import { ADZUNA_COUNTRIES, normalizeAdzunaCountry } from "@/lib/adzuna-countries";
 import { createClient } from "@/lib/supabase/client";
 
 const saveButtonClass =
@@ -63,7 +65,9 @@ export function ProfileEditor() {
   const [seniority, setSeniority] = useState<SeniorityLevel>("MID");
   const [industry, setIndustry] = useState<ProfileIndustry>("SOFTWARE");
   const [locationCity, setLocationCity] = useState("");
-  const [locationCountry, setLocationCountry] = useState("");
+  const [locationCountry, setLocationCountry] = useState("gb");
+  const [skills, setSkills] = useState<string[]>([]);
+  const [skillDraft, setSkillDraft] = useState("");
 
   const [accountPending, setAccountPending] = useState(false);
   const [accountMsg, setAccountMsg] = useState<string | null>(null);
@@ -156,7 +160,10 @@ export function ProfileEditor() {
         setSeniority(detail.seniority);
         setIndustry(detail.primaryIndustry);
         setLocationCity(detail.locationCity ?? "");
-        setLocationCountry(detail.locationCountry ?? "");
+        setLocationCountry(
+          normalizeAdzunaCountry(detail.locationCountry ?? "gb"),
+        );
+        setSkills(detail.skills ?? []);
         setParseStatus(detail.currentCv?.parseStatus ?? null);
         if (detail.currentCv?.parseStatus === "PENDING") {
           startPoll(detail.id);
@@ -222,11 +229,20 @@ export function ProfileEditor() {
     setRolePending(true);
     try {
       const token = await getToken();
-      const body: Record<string, string> = {
+      const body: {
+        jobTitle: string;
+        profileTitle: string;
+        seniority: SeniorityLevel;
+        primaryIndustry: ProfileIndustry;
+        skills: string[];
+        locationCity?: string;
+        locationCountry?: string;
+      } = {
         jobTitle: title,
         profileTitle: profileTitle.trim() || title,
         seniority,
         primaryIndustry: industry,
+        skills,
       };
       if (locationCity.trim()) body.locationCity = locationCity.trim();
       if (locationCountry.trim().length === 2) {
@@ -245,11 +261,13 @@ export function ProfileEditor() {
           ? {
               ...prev,
               ...updated,
+              skills: updated.skills ?? skills,
               currentCv: prev.currentCv,
               generalAtsAssessment: prev.generalAtsAssessment,
             }
           : prev,
       );
+      setSkills(updated.skills ?? skills);
       setRoleMsg("Role details saved.");
     } catch (err) {
       setRoleError(
@@ -533,6 +551,53 @@ export function ProfileEditor() {
             </div>
           </fieldset>
 
+          <fieldset className="flex flex-col gap-2">
+            <legend className="text-sm font-medium">Skills</legend>
+            <p className="text-xs text-muted-foreground">
+              Used for Market Fit suggestions and stronger cover letters. Press
+              Enter or comma to add.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {skills.map((skill) => (
+                <button
+                  key={skill}
+                  type="button"
+                  onClick={() =>
+                    setSkills((prev) => prev.filter((s) => s !== skill))
+                  }
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-guava-green/25 bg-guava-green/5 px-2.5 py-1 text-sm"
+                  aria-label={`Remove ${skill}`}
+                >
+                  {skill}
+                  <span className="text-muted-foreground" aria-hidden>
+                    ×
+                  </span>
+                </button>
+              ))}
+            </div>
+            <input
+              id="skillDraft"
+              name="skillDraft"
+              value={skillDraft}
+              onChange={(e) => setSkillDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === ",") {
+                  e.preventDefault();
+                  const next = skillDraft.trim().replace(/,$/, "");
+                  if (!next) return;
+                  setSkills((prev) =>
+                    prev.some((s) => s.toLowerCase() === next.toLowerCase())
+                      ? prev
+                      : [...prev, next],
+                  );
+                  setSkillDraft("");
+                }
+              }}
+              placeholder="e.g. TypeScript, stakeholder management"
+              className={paperInputClass}
+            />
+          </fieldset>
+
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
               <label htmlFor="locationCity" className="text-sm font-medium">
@@ -551,19 +616,21 @@ export function ProfileEditor() {
             </div>
             <div className="flex flex-col gap-2">
               <label htmlFor="locationCountry" className="text-sm font-medium">
-                Country{" "}
-                <span className="font-normal text-muted-foreground">
-                  (ISO, e.g. GB)
-                </span>
+                Country
               </label>
-              <input
+              <select
                 id="locationCountry"
                 name="locationCountry"
-                maxLength={2}
-                value={locationCountry}
+                value={normalizeAdzunaCountry(locationCountry)}
                 onChange={(e) => setLocationCountry(e.target.value)}
-                className={`${paperInputClass} font-mono uppercase`}
-              />
+                className={paperInputClass}
+              >
+                {ADZUNA_COUNTRIES.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
@@ -678,6 +745,14 @@ export function ProfileEditor() {
             </p>
           ) : null}
         </PaperPanel>
+      ) : null}
+
+      {profile ? (
+        <MarketFitPanel
+          profileId={profile.id}
+          skillsCount={skills.length}
+          getToken={getToken}
+        />
       ) : null}
 
       {profile ? (

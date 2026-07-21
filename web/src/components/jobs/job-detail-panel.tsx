@@ -155,8 +155,8 @@ export function JobDetailPanel({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden">
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+      <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain break-words [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {showBack && onBack ? (
           <button
             type="button"

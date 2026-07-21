@@ -1,3 +1,8 @@
+import {
+  normalizeAdzunaCountry,
+  type AdzunaCountryCode,
+} from "@/lib/adzuna-countries";
+
 /** Encode canonical keys for URL paths (colons → %3A). */
 export function jobDetailPath(canonicalKey: string): string {
   return `/app/jobs/${encodeURIComponent(canonicalKey)}`;
@@ -9,16 +14,11 @@ export function decodeJobKey(param: string): string {
 
 const PLACEHOLDER_TITLES = new Set(["job seeker"]);
 
-/** Adzuna uses `gb`; accept common aliases from profile ISO fields. */
-const COUNTRY_ALIASES: Record<string, string> = {
-  uk: "gb",
-};
-
 export type JobSearchDefaults = {
   q: string;
   location: string;
   /** Lowercase Adzuna country code (e.g. gb, de, ie). */
-  country: string;
+  country: AdzunaCountryCode;
 };
 
 /**
@@ -45,8 +45,7 @@ export function deriveJobSearchDefaults(profile: {
   }
 
   const location = profile.locationCity?.trim() ?? "";
-  const rawCountry = (profile.locationCountry?.trim() || "gb").toLowerCase();
-  const country = COUNTRY_ALIASES[rawCountry] ?? rawCountry;
+  const country = normalizeAdzunaCountry(profile.locationCountry);
 
   return { q, location, country };
 }

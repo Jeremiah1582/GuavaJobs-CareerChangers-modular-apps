@@ -13,6 +13,7 @@ import { EmptyState, ErrorState } from "@/components/ui/state-panel";
 import { AnalyticsEvents, track } from "@/lib/analytics";
 import {
   APPLICATION_STATUSES,
+  ATS_GOOD_SCORE_MIN,
   STATUS_LABELS,
   applicationCompany,
   applicationTitle,
@@ -21,6 +22,24 @@ import {
 } from "@/lib/applications";
 import { getAccessToken } from "@/lib/session";
 import { useOnlineStatus } from "@/lib/online";
+import { usePendingGenerations } from "@/lib/use-generation-watch";
+
+/** Compact on/off mark for package columns (letter / ATS / CV). */
+function PackageMark({ label, on }: { label: string; on: boolean }) {
+  return (
+    <span
+      className={[
+        "inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide",
+        on
+          ? "border-guava-green/30 bg-guava-green/10 text-guava-green"
+          : "border-border/70 bg-muted/50 text-muted-foreground/70",
+      ].join(" ")}
+      title={on ? `${label} ready` : `${label} missing`}
+    >
+      {label}
+    </span>
+  );
+}
 
 /** What cascade-deletes with the application row (profile / master CV are kept). */
 function cascadeDeleteItems(app: ApplicationResponse): string[] {
@@ -205,6 +224,14 @@ export function TrackerList() {
   }, [listQuery.data, submitted.status, submitted.company]);
 
   const apps = useMemo(() => listQuery.data ?? [], [listQuery.data]);
+  const pendingGenerations = usePendingGenerations();
+  const pendingByAppId = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const row of pendingGenerations) {
+      map.set(row.id, (map.get(row.id) ?? 0) + 1);
+    }
+    return map;
+  }, [pendingGenerations]);
 
   const deleteMutation = useMutation({
     mutationFn: async (applicationId: string) => {
@@ -306,10 +333,12 @@ export function TrackerList() {
       </div>
 
       {listQuery.isLoading ? (
-        <div className="space-y-0 divide-y divide-guava-green/10 rounded-2xl border border-guava-green/15 bg-white/60">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-16 animate-pulse bg-muted/40" />
-          ))}
+        <div className="overflow-hidden rounded-2xl border border-guava-green/15 bg-white/60">
+          <div className="space-y-0 divide-y divide-guava-green/10">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="h-12 animate-pulse bg-muted/40" />
+            ))}
+          </div>
         </div>
       ) : !online ? (
         <ErrorState
@@ -352,44 +381,157 @@ export function TrackerList() {
         />
       ) : (
         <div className="overflow-hidden rounded-2xl border border-guava-green/15 bg-white/70">
-          <ul className="divide-y divide-guava-green/10">
-            {apps.map((app) => {
-              const title = applicationTitle(app);
-              const company = applicationCompany(app);
-              return (
-                <li key={app.id}>
-                  <div className="flex items-stretch gap-1 pr-2 transition-colors hover:bg-guava-green/5 md:pr-3">
-                    <Link
-                      href={`/app/applications/${app.id}`}
-                      className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-3 px-4 py-4 md:px-5"
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[44rem] border-collapse text-left text-sm">
+              <thead>
+                <tr className="border-b border-guava-green/15 bg-guava-green/[0.04] text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  <th scope="col" className="px-4 py-3 font-medium md:px-5">
+                    Role
+                  </th>
+                  <th scope="col" className="px-3 py-3 font-medium">
+                    Company
+                  </th>
+                  <th
+                    scope="col"
+                    className="hidden px-3 py-3 font-medium lg:table-cell"
+                  >
+                    Location
+                  </th>
+                  <th scope="col" className="px-3 py-3 font-medium">
+                    Status
+                  </th>
+                  <th
+                    scope="col"
+                    className="hidden px-3 py-3 font-medium sm:table-cell"
+                  >
+                    Fit
+                  </th>
+                  <th
+                    scope="col"
+                    className="hidden px-3 py-3 font-medium md:table-cell"
+                  >
+                    Package
+                  </th>
+                  <th
+                    scope="col"
+                    className="hidden px-3 py-3 font-medium xl:table-cell"
+                  >
+                    Source
+                  </th>
+                  <th scope="col" className="px-3 py-3 font-medium">
+                    Updated
+                  </th>
+                  <th scope="col" className="w-12 px-2 py-3">
+                    <span className="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-guava-green/10">
+                {apps.map((app) => {
+                  const title = applicationTitle(app);
+                  const company = applicationCompany(app);
+                  const location =
+                    app.jobLocation?.trim() ||
+                    (typeof app.jobSnapshot?.location === "string"
+                      ? app.jobSnapshot.location
+                      : null);
+                  const generatingCount = pendingByAppId.get(app.id) ?? 0;
+                  const fitScore = app.atsReport?.score;
+                  const hasLetter = Boolean(app.coverLetterContent?.trim());
+                  const hasCv = Boolean(app.generatedCv);
+                  const hasAts = Boolean(app.atsReport);
+
+                  return (
+                    <tr
+                      key={app.id}
+                      className="group transition-colors hover:bg-guava-green/5"
                     >
-                      <div className="min-w-0">
-                        <p className="truncate font-medium tracking-tight">
-                          {title}
-                        </p>
-                        <p className="mt-0.5 truncate text-sm text-muted-foreground">
-                          {company ?? "Unknown company"}
-                          {app.generationMode === "MANUAL" ? " · Manual" : ""}
-                          {" · "}
-                          {formatShortDate(app.updatedAt)}
-                        </p>
-                      </div>
-                      <StatusChip status={app.status} />
-                    </Link>
-                    <button
-                      type="button"
-                      aria-label={`Delete ${title}`}
-                      title="Delete application"
-                      onClick={() => openDelete(app)}
-                      className="my-3 shrink-0 self-center rounded-lg p-2 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                    >
-                      <Trash className="size-4" weight="bold" />
-                    </button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+                      <td className="max-w-[14rem] px-4 py-3 align-middle md:max-w-[18rem] md:px-5">
+                        <Link
+                          href={`/app/applications/${app.id}`}
+                          className="block min-w-0 font-medium tracking-tight text-foreground outline-none group-hover:text-guava-green focus-visible:underline"
+                        >
+                          <span className="line-clamp-2">{title}</span>
+                          {generatingCount > 0 ? (
+                            <span className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-guava-pink">
+                              <CircleNotch
+                                className="size-3 animate-spin"
+                                weight="bold"
+                              />
+                              Generating…
+                            </span>
+                          ) : null}
+                        </Link>
+                      </td>
+                      <td className="max-w-[10rem] px-3 py-3 align-middle text-muted-foreground">
+                        <Link
+                          href={`/app/applications/${app.id}`}
+                          className="block truncate outline-none focus-visible:underline"
+                        >
+                          {company ?? "—"}
+                        </Link>
+                      </td>
+                      <td className="hidden max-w-[9rem] px-3 py-3 align-middle text-muted-foreground lg:table-cell">
+                        <span className="truncate block">
+                          {location?.trim() || "—"}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 align-middle">
+                        <StatusChip status={app.status} />
+                      </td>
+                      <td className="hidden px-3 py-3 align-middle tabular-nums sm:table-cell">
+                        {typeof fitScore === "number" ? (
+                          <span
+                            className={[
+                              "font-medium",
+                              fitScore >= ATS_GOOD_SCORE_MIN
+                                ? "text-guava-green"
+                                : fitScore >= 50
+                                  ? "text-foreground"
+                                  : "text-muted-foreground",
+                            ].join(" ")}
+                          >
+                            {Math.round(fitScore)}
+                            {app.atsReport?.stale ? (
+                              <span className="ml-1 text-[10px] font-normal text-muted-foreground">
+                                stale
+                              </span>
+                            ) : null}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="hidden px-3 py-3 align-middle md:table-cell">
+                        <div className="flex flex-wrap gap-1">
+                          <PackageMark label="Letter" on={hasLetter} />
+                          <PackageMark label="ATS" on={hasAts} />
+                          <PackageMark label="CV" on={hasCv} />
+                        </div>
+                      </td>
+                      <td className="hidden px-3 py-3 align-middle text-muted-foreground xl:table-cell">
+                        {app.generationMode === "MANUAL" ? "Manual" : "AI"}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-3 align-middle text-muted-foreground">
+                        {formatShortDate(app.updatedAt)}
+                      </td>
+                      <td className="px-2 py-3 align-middle">
+                        <button
+                          type="button"
+                          aria-label={`Delete ${title}`}
+                          title="Delete application"
+                          onClick={() => void openDelete(app)}
+                          className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                        >
+                          <Trash className="size-4" weight="bold" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

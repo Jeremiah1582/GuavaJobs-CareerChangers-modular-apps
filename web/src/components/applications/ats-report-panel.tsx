@@ -21,8 +21,13 @@ import type {
   ImproveApplicationGapResponse,
 } from "@/api/types";
 import { PaperPanel, paperInputClass } from "@/components/ui/paper-panel";
-import { ATS_GOOD_SCORE_MIN } from "@/lib/applications";
+import { ATS_GOOD_SCORE_MIN, applicationTitle } from "@/lib/applications";
 import { AnalyticsEvents, track } from "@/lib/analytics";
+import {
+  requestGenerationNotificationPermission,
+  watchGeneration,
+} from "@/lib/generation-watch";
+import { useGenerationWatch } from "@/lib/use-generation-watch";
 import {
   IMPROVE_WORD_MIN,
   composeGapAnswer,
@@ -625,10 +630,7 @@ export function AtsReportPanel({
 }) {
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
-  const [awaitingRefresh, setAwaitingRefresh] = useState(false);
-  const [assessedAtBaseline, setAssessedAtBaseline] = useState<string | null>(
-    null,
-  );
+  const awaitingRefresh = useGenerationWatch(applicationId, "ats");
   const [savingGap, setSavingGap] = useState<string | null>(null);
   const [gapErrors, setGapErrors] = useState<Record<string, string>>({});
 
@@ -650,8 +652,13 @@ export function AtsReportPanel({
     },
     onSuccess: (data) => {
       setError(null);
-      setAssessedAtBaseline(report.assessedAt);
-      setAwaitingRefresh(true);
+      void requestGenerationNotificationPermission();
+      watchGeneration({
+        id: applicationId,
+        kind: "ats",
+        title: applicationTitle(data),
+        baselineAt: report.assessedAt,
+      });
       queryClient.setQueryData(["application", applicationId], data);
       onApplicationUpdated?.(data);
       track(AnalyticsEvents.generate_started, {
@@ -661,8 +668,6 @@ export function AtsReportPanel({
       void queryClient.invalidateQueries({ queryKey: ["me"] });
     },
     onError: (err) => {
-      setAwaitingRefresh(false);
-      setAssessedAtBaseline(null);
       setError(
         err instanceof ApiError
           ? err.message
@@ -707,31 +712,6 @@ export function AtsReportPanel({
       }));
     },
   });
-
-  // Poll until the report fingerprint is fresh (assessedAt moves / stale clears).
-  useEffect(() => {
-    if (!awaitingRefresh) return;
-    const id = window.setInterval(() => {
-      void queryClient.invalidateQueries({
-        queryKey: ["application", applicationId],
-      });
-    }, 2500);
-    return () => window.clearInterval(id);
-  }, [awaitingRefresh, applicationId, queryClient]);
-
-  useEffect(() => {
-    if (!awaitingRefresh || !assessedAtBaseline) return;
-    if (report.assessedAt !== assessedAtBaseline && report.stale !== true) {
-      setAwaitingRefresh(false);
-      setAssessedAtBaseline(null);
-      setGapErrors({});
-    }
-  }, [
-    awaitingRefresh,
-    assessedAtBaseline,
-    report.assessedAt,
-    report.stale,
-  ]);
 
   const refreshing = refreshMutation.isPending || awaitingRefresh;
   const showStale = report.stale === true || awaitingRefresh;

@@ -183,6 +183,7 @@ model Profile {
   cvDocuments          CvDocument[]          @relation("ProfileCvs")
   generalAtsAssessment ProfileAtsAssessment?
   careerCv             ProfileCareerCv?
+  marketFit            ProfileMarketFit?
   applications         Application[]
   generatedCvs         GeneratedCv[]
 
@@ -258,6 +259,22 @@ model ProfileCareerCv {
 
   @@index([userId])
   @@map("profile_career_cvs")
+}
+
+// ─── Market Fit (skills → roles + regional salary; 1:1 with Profile) ─────────
+
+model ProfileMarketFit {
+  profileId        String   @id
+  content          Json // marketFitResponseSchema
+  inputFingerprint String
+  regionCountry    String // lowercase Adzuna ISO-2
+  generatedAt      DateTime
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@map("profile_market_fits")
 }
 
 // ─── Application (tracker + point-in-time application package) ─────────────

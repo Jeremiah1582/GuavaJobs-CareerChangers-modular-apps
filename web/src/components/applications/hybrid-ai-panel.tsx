@@ -8,6 +8,12 @@ import type { ApplicationResponse } from "@/api/types";
 import { QuotaSheet } from "@/components/applications/quota-sheet";
 import { PaperPanel, paperInputClass } from "@/components/ui/paper-panel";
 import { AnalyticsEvents, track } from "@/lib/analytics";
+import { applicationTitle } from "@/lib/applications";
+import {
+  requestGenerationNotificationPermission,
+  watchGeneration,
+} from "@/lib/generation-watch";
+import { useGenerationWatch } from "@/lib/use-generation-watch";
 import { getAccessToken } from "@/lib/session";
 
 export function HybridAiPanel({ app }: { app: ApplicationResponse }) {
@@ -15,6 +21,8 @@ export function HybridAiPanel({ app }: { app: ApplicationResponse }) {
   const [jd, setJd] = useState(app.pastedJobDescription ?? "");
   const [error, setError] = useState<string | null>(null);
   const [quotaOpen, setQuotaOpen] = useState(false);
+  const awaitingCv = useGenerationWatch(app.id, "cv");
+  const awaitingAts = useGenerationWatch(app.id, "ats");
 
   const existingJd = (app.pastedJobDescription ?? "").trim();
   const effectiveJd = jd.trim() || existingJd;
@@ -71,6 +79,13 @@ export function HybridAiPanel({ app }: { app: ApplicationResponse }) {
     },
     onSuccess: (data) => {
       setError(null);
+      void requestGenerationNotificationPermission();
+      watchGeneration({
+        id: app.id,
+        kind: "ats",
+        title: applicationTitle(app),
+        baselineAt: app.atsReport?.assessedAt ?? null,
+      });
       queryClient.setQueryData(["application", app.id], data);
       track(AnalyticsEvents.generate_started, {
         applicationId: data.id,
@@ -112,6 +127,13 @@ export function HybridAiPanel({ app }: { app: ApplicationResponse }) {
     },
     onSuccess: (data) => {
       setError(null);
+      void requestGenerationNotificationPermission();
+      watchGeneration({
+        id: app.id,
+        kind: "cv",
+        title: applicationTitle(app),
+        baselineAt: app.generatedCv?.updatedAt ?? null,
+      });
       queryClient.setQueryData(["application", app.id], data);
       track(AnalyticsEvents.generate_started, {
         applicationId: data.id,
@@ -132,7 +154,11 @@ export function HybridAiPanel({ app }: { app: ApplicationResponse }) {
   });
 
   const busy =
-    letterMutation.isPending || atsMutation.isPending || cvMutation.isPending;
+    letterMutation.isPending ||
+    atsMutation.isPending ||
+    cvMutation.isPending ||
+    awaitingCv ||
+    awaitingAts;
 
   return (
     <>
@@ -190,10 +216,10 @@ export function HybridAiPanel({ app }: { app: ApplicationResponse }) {
                 : undefined
             }
           >
-            {atsMutation.isPending ? (
+            {atsMutation.isPending || awaitingAts ? (
               <CircleNotch className="size-4 animate-spin" weight="bold" />
             ) : null}
-            Generate fit report
+            {awaitingAts ? "Updating fit report…" : "Generate fit report"}
           </button>
           <button
             type="button"
@@ -201,10 +227,10 @@ export function HybridAiPanel({ app }: { app: ApplicationResponse }) {
             onClick={() => cvMutation.mutate()}
             className="inline-flex items-center gap-2 rounded-xl border border-guava-green/25 bg-white px-4 py-2.5 text-sm font-medium disabled:opacity-50"
           >
-            {cvMutation.isPending ? (
+            {cvMutation.isPending || awaitingCv ? (
               <CircleNotch className="size-4 animate-spin" weight="bold" />
             ) : null}
-            Generate tailored CV
+            {awaitingCv ? "Generating tailored CV…" : "Generate tailored CV"}
           </button>
         </div>
       </PaperPanel>

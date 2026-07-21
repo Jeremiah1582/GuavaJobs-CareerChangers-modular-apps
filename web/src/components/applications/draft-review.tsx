@@ -352,13 +352,13 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
     trackedTerminal.current = key;
 
     if (app.generationStatus === "COMPLETED") {
-      unwatchGeneration(app.id);
+      unwatchGeneration(app.id, "package");
       track(AnalyticsEvents.generate_completed, {
         applicationId: app.id,
         canonicalJobKey: app.canonicalJobKey,
       });
     } else {
-      unwatchGeneration(app.id);
+      unwatchGeneration(app.id, "package");
       track(AnalyticsEvents.generate_failed, {
         applicationId: app.id,
         canonicalJobKey: app.canonicalJobKey,
@@ -447,7 +447,11 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
       trackedTerminal.current = null;
       setGeneratingSince(Date.now());
       void requestGenerationNotificationPermission();
-      watchGeneration(data.id, applicationTitle(data));
+      watchGeneration({
+        id: data.id,
+        kind: "package",
+        title: applicationTitle(data),
+      });
       queryClient.setQueryData(["application", applicationId], data);
       track(AnalyticsEvents.generate_started, {
         applicationId: data.id,
@@ -484,7 +488,7 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
   useEffect(() => {
     if (!app || !generating) return;
     void requestGenerationNotificationPermission();
-    watchGeneration(app.id, title);
+    watchGeneration({ id: app.id, kind: "package", title });
   }, [app?.id, generating, title]);
 
   const stuckMs = GENERATION_STUCK_UI_MS;

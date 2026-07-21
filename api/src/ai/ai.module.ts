@@ -6,6 +6,7 @@ import { GeneratedCvGenerator } from './generated-cv.generator';
 import { JobFactsParser } from './job-facts.parser';
 import { LlmClient } from './llm.client';
 import { ProfileAtsGenerator } from './profile-ats.generator';
+import { MarketFitGenerator } from './market-fit.generator';
 
 @Module({
   providers: [
@@ -16,6 +17,7 @@ import { ProfileAtsGenerator } from './profile-ats.generator';
     GeneratedCvGenerator,
     AtsReportGenerator,
     JobFactsParser,
+    MarketFitGenerator,
   ],
   exports: [
     LlmClient,
@@ -25,6 +27,7 @@ import { ProfileAtsGenerator } from './profile-ats.generator';
     GeneratedCvGenerator,
     AtsReportGenerator,
     JobFactsParser,
+    MarketFitGenerator,
   ],
 })
 export class AiModule {}

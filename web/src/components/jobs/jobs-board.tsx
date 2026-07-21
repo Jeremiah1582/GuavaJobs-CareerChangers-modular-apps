@@ -1,9 +1,29 @@
 "use client";
 
+import { useEffect, useState, type ReactNode } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { CircleNotch, MagnifyingGlass } from "@phosphor-icons/react";
 import type { JobListItem } from "@/api/types";
 import { JobCard } from "@/components/jobs/job-card";
 import { JobDetailPanel } from "@/components/jobs/job-detail-panel";
+
+/** Scrollable pane with hidden scrollbars (wheel / trackpad still work). */
+const SCROLL_PANE =
+  "min-h-0 overflow-y-auto overscroll-y-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
+
+function useIsLgDesktop() {
+  const [isLg, setIsLg] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const update = () => setIsLg(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
+  return isLg;
+}
 
 type JobsBoardProps = {
   jobs: JobListItem[];
@@ -13,6 +33,8 @@ type JobsBoardProps = {
   onClear: () => void;
   mode?: "app" | "public";
   emptyMessage?: string;
+  /** Pagination / attribution pinned below the desktop split pane */
+  footer?: ReactNode;
 };
 
 export function JobsBoard({
@@ -23,7 +45,12 @@ export function JobsBoard({
   onClear,
   mode = "app",
   emptyMessage = "No jobs found. Try a different search.",
+  footer,
 }: JobsBoardProps) {
+  const reduceMotion = useReducedMotion();
+  const isLgDesktop = useIsLgDesktop();
+  const animateDesktopDetail = isLgDesktop && !reduceMotion;
+
   const activeJob =
     jobs.find((job) => job.canonicalKey === selectedKey) ?? null;
 
@@ -55,55 +82,113 @@ export function JobsBoard({
     );
   }
 
+  const listItems = jobs.map((job) => (
+    <li key={job.canonicalKey}>
+      <JobCard
+        job={job}
+        isSelected={activeJob?.canonicalKey === job.canonicalKey}
+        onSelect={onSelect}
+      />
+    </li>
+  ));
+
+  const boardShell =
+    "rounded-2xl border border-guava-green/15 bg-gradient-to-br from-guava-green/[0.07] via-white/50 to-background";
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
-      {/* Tablet + desktop: list | detail split */}
-      <div className="hidden min-h-0 max-h-[calc(100dvh-12rem)] flex-1 gap-4 rounded-2xl border border-guava-green/15 bg-gradient-to-br from-guava-green/[0.07] via-white/50 to-background p-3 md:grid md:grid-cols-1 md:p-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-        <ul
+    <div className="flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col gap-3 overflow-x-hidden">
+      {/* Desktop: viewport-height split pane; list + detail scroll independently */}
+      <div
+        className={`hidden min-w-0 max-w-full overflow-hidden p-4 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col ${boardShell}`}
+      >
+        <div
           className={[
-            "min-h-0 space-y-2.5 overflow-y-auto overscroll-contain md:max-h-full md:pr-1",
-            activeJob ? "hidden lg:block" : "block",
+            "grid min-h-0 min-w-0 flex-1 gap-4 overflow-hidden",
+            activeJob
+              ? "grid-cols-[minmax(0,2fr)_minmax(0,3fr)]"
+              : "grid-cols-1",
           ].join(" ")}
         >
-          {jobs.map((job) => (
-            <li key={job.canonicalKey}>
-              <JobCard
-                job={job}
-                isSelected={activeJob?.canonicalKey === job.canonicalKey}
-                onSelect={onSelect}
-              />
-            </li>
-          ))}
+          <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+            <ul className={`min-w-0 flex-1 space-y-2.5 pr-1 ${SCROLL_PANE}`}>
+              {listItems}
+            </ul>
+          </div>
+
+          <AnimatePresence initial={false}>
+            {activeJob ? (
+              <motion.div
+                key={activeJob.canonicalKey}
+                layout={animateDesktopDetail}
+                initial={
+                  animateDesktopDetail
+                    ? { opacity: 0, x: 16, scale: 0.98 }
+                    : false
+                }
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={
+                  animateDesktopDetail
+                    ? { opacity: 0, x: 16, scale: 0.98 }
+                    : { opacity: 0 }
+                }
+                transition={{ type: "spring", stiffness: 320, damping: 32 }}
+                className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-guava-green/20 bg-white/95 p-4 shadow-sm md:p-5"
+              >
+                <JobDetailPanel
+                  summary={activeJob}
+                  showBack
+                  onBack={onClear}
+                  backClassName="lg:hidden"
+                  mode={mode}
+                />
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
+        </div>
+
+        {footer ? (
+          <div className="mt-3 min-w-0 shrink-0 space-y-2 border-t border-guava-green/10 pt-3">
+            {footer}
+          </div>
+        ) : null}
+      </div>
+
+      {/* Tablet: document scroll; detail replaces list when open */}
+      <div
+        className={`hidden min-w-0 max-w-full gap-4 overflow-x-hidden p-3 md:grid md:grid-cols-1 md:p-4 ${boardShell} lg:hidden`}
+      >
+        <ul
+          className={[
+            "min-w-0 space-y-2.5 md:pr-1",
+            activeJob ? "hidden" : "block",
+          ].join(" ")}
+        >
+          {listItems}
         </ul>
 
-        {activeJob ? (
-          <div className="flex min-h-0 max-h-full flex-col overflow-hidden rounded-xl border border-guava-green/20 bg-white/95 p-4 shadow-sm md:p-5">
-            <JobDetailPanel
-              summary={activeJob}
-              showBack
-              onBack={onClear}
-              backClassName="lg:hidden"
-              mode={mode}
-            />
-          </div>
-        ) : (
-          <div className="hidden min-h-[12rem] items-center justify-center rounded-xl border border-dashed border-guava-green/25 bg-white/40 p-8 text-center lg:flex">
-            <p className="max-w-xs text-sm text-muted-foreground">
-              {mode === "public"
-                ? "Select a role to read the listing. Apply when you are ready."
-                : "Select a role to read the listing and generate a package."}
-            </p>
-          </div>
-        )}
+        <AnimatePresence initial={false}>
+          {activeJob ? (
+            <motion.div
+              key={activeJob.canonicalKey}
+              initial={false}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-guava-green/20 bg-white/95 p-4 shadow-sm md:p-5"
+            >
+              <JobDetailPanel
+                summary={activeJob}
+                showBack
+                onBack={onClear}
+                mode={mode}
+              />
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
       </div>
 
       {/* Phone: scrollable list */}
-      <ul className="space-y-2.5 md:hidden">
-        {jobs.map((job) => (
-          <li key={job.canonicalKey}>
-            <JobCard job={job} isSelected={false} onSelect={onSelect} />
-          </li>
-        ))}
+      <ul className="min-w-0 space-y-2.5 md:hidden">
+        {listItems}
       </ul>
 
       {/* Phone: full-viewport detail */}

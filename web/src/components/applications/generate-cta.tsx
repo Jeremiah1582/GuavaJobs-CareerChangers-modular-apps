@@ -98,7 +98,11 @@ export function GenerateCta({
       setNextAction(null);
       setHasApplicationsCookie(true);
       void requestGenerationNotificationPermission();
-      watchGeneration(data.id, applicationTitle(data));
+      watchGeneration({
+        id: data.id,
+        kind: "package",
+        title: applicationTitle(data),
+      });
       if (
         data.generationStatus === "PENDING" ||
         data.generationStatus === "PROCESSING"
