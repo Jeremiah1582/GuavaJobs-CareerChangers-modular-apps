@@ -121,6 +121,7 @@ export class MarketFitService {
       roles.push({
         title: role.title,
         fitLevel: role.fitLevel,
+        matchScore: role.matchScore,
         whyFit: role.whyFit,
         evidenceSkills: role.evidenceSkills,
         salary,

@@ -348,6 +348,7 @@ export type MarketFitResponse = {
   roles: Array<{
     title: string;
     fitLevel: "strong" | "adjacent" | "stretch";
+    matchScore?: number;
     whyFit: string;
     evidenceSkills: string[];
     salary: {

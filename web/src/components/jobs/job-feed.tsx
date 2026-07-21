@@ -6,14 +6,19 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { apiFetch, ApiError, publicApiFetch } from "@/api/client";
 import type {
   JobSearchResponse,
+  MarketFitResponse,
   MeResponse,
   ProfileResponse,
 } from "@/api/types";
 import { JobsBoard } from "@/components/jobs/jobs-board";
-import { JobsSearchBar } from "@/components/jobs/jobs-search-bar";
+import {
+  JobsSearchBar,
+  type RecommendedSearchCriterion,
+} from "@/components/jobs/jobs-search-bar";
 import { ErrorState } from "@/components/ui/state-panel";
 import { AnalyticsEvents, track } from "@/lib/analytics";
 import { deriveJobSearchDefaults } from "@/lib/jobs";
+import { formatJobSearchError } from "@/lib/job-search-errors";
 import { normalizeAdzunaCountry } from "@/lib/adzuna-countries";
 import { useOnlineStatus } from "@/lib/online";
 import { getAccessTokenOrNull } from "@/lib/session";
@@ -91,12 +96,45 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
         `/profiles/${profileId}`,
         { token },
       );
-      return deriveJobSearchDefaults(profile);
+      return { defaults: deriveJobSearchDefaults(profile), profileId };
     },
     enabled: needsProfileDefaults && online,
     staleTime: 60_000,
     retry: 1,
   });
+
+  const marketFitQuery = useQuery({
+    queryKey: ["job-feed-market-fit"] as const,
+    queryFn: async () => {
+      const token = await getAccessTokenOrNull();
+      if (!token) return null;
+      const me = await apiFetch<MeResponse>("/me", { token });
+      const profileId =
+        me.defaultProfileId ?? me.defaultProfile?.id ?? null;
+      if (!profileId) return null;
+      try {
+        return await apiFetch<MarketFitResponse>(
+          `/profiles/${profileId}/market-fit`,
+          { token },
+        );
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) return null;
+        throw err;
+      }
+    },
+    enabled: mode === "app" && online,
+    staleTime: 60_000,
+    retry: false,
+  });
+
+  const recommendedCriteria: RecommendedSearchCriterion[] = (
+    marketFitQuery.data?.roles ?? []
+  ).map((role) => ({
+    label: role.title,
+    q: role.searchCta.q,
+    country: role.searchCta.country,
+    location: role.searchCta.location,
+  }));
 
   useEffect(() => {
     if (!needsProfileDefaults || defaultsApplied.current) return;
@@ -105,7 +143,7 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
     }
 
     defaultsApplied.current = true;
-    const defaults = profileDefaultsQuery.data;
+    const defaults = profileDefaultsQuery.data?.defaults;
     if (defaults) {
       setQuery(defaults.q);
       setLocation(defaults.location);
@@ -208,6 +246,31 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
     });
   }
 
+  function onRecommendedSelect(criterion: RecommendedSearchCriterion) {
+    const nextCountry = normalizeAdzunaCountry(
+      criterion.country ?? country,
+    );
+    const nextLocation = criterion.location?.trim() || location;
+    setQuery(criterion.q);
+    setLocation(nextLocation);
+    setCountry(nextCountry);
+    const next: SubmittedSearch = {
+      q: criterion.q,
+      location: nextLocation,
+      country: nextCountry,
+      page: 1,
+    };
+    setSubmitted(next);
+    syncUrl({ ...next, job: null });
+    track(AnalyticsEvents.job_search, {
+      q: criterion.q,
+      location: nextLocation.trim() || null,
+      country: nextCountry,
+      page: 1,
+      source: "market_fit_tab",
+    });
+  }
+
   const selectJob = useCallback(
     (canonicalKey: string) => {
       syncUrl({ job: canonicalKey });
@@ -276,6 +339,10 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
       </>
     ) : null;
 
+  const searchError = searchQuery.isError
+    ? formatJobSearchError(searchQuery.error)
+    : null;
+
   return (
     <div className="flex min-h-0 w-full min-w-0 max-w-full flex-col gap-5 overflow-x-hidden lg:min-h-0 lg:flex-1 lg:gap-4 lg:overflow-hidden">
       <div className="min-w-0 shrink-0">
@@ -288,6 +355,8 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
           onCountryChange={(value) => setCountry(normalizeAdzunaCountry(value))}
           onSubmit={onSearch}
           pending={searchPending}
+          recommendedCriteria={recommendedCriteria}
+          onRecommendedSelect={onRecommendedSelect}
         />
       </div>
 
@@ -298,20 +367,11 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
           nextAction="Reconnect, then retry search."
           onRetry={() => void searchQuery.refetch()}
         />
-      ) : searchQuery.isError ? (
+      ) : searchError ? (
         <ErrorState
           title="Search failed"
-          message={
-            searchQuery.error instanceof ApiError
-              ? searchQuery.error.message
-              : "Search failed. Try again."
-          }
-          nextAction={
-            searchQuery.error instanceof ApiError &&
-            searchQuery.error.code === "JOBS_NOT_CONFIGURED"
-              ? "The API needs ADZUNA_APP_ID and ADZUNA_API_KEY on Coolify."
-              : "Check your connection, broaden keywords, or try again."
-          }
+          message={searchError.message}
+          nextAction={searchError.nextAction}
           onRetry={() => void searchQuery.refetch()}
         />
       ) : (

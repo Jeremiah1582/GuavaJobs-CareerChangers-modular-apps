@@ -9,6 +9,7 @@ import { marketFitLevelSchema } from '../shared/schemas/market-fit.schema';
 const llmRoleSchema = z.object({
   title: z.string().min(1).max(200),
   fitLevel: marketFitLevelSchema,
+  matchScore: z.number().int().min(0).max(100),
   whyFit: z.string().min(1).max(800),
   evidenceSkills: z.array(z.string()).max(12),
 });
@@ -28,6 +29,7 @@ Rules:
 - Do NOT invent employers, degrees, dates, or skills.
 - Base every suggestion on transferable skills and evidence present in the input.
 - Prefer a mix: strong matches, adjacent pivots, and one thoughtful stretch role.
+- matchScore: integer 0–100 for how well skills evidence supports this title (strong: typically 78–95, adjacent: 55–77, stretch: 35–54).
 - whyFit: one short sentence citing concrete skills from the input.
 - evidenceSkills: subset of skills from the input that support the title.
 - Do NOT include salary figures or compensation estimates.
@@ -35,7 +37,7 @@ Rules:
 ${HUMAN_VOICE_PROMPT}
 
 Return JSON only:
-{ "roles": [ { "title", "fitLevel": "strong"|"adjacent"|"stretch", "whyFit", "evidenceSkills": string[] } ] }
+{ "roles": [ { "title", "fitLevel": "strong"|"adjacent"|"stretch", "matchScore": number, "whyFit", "evidenceSkills": string[] } ] }
 Exactly 5 roles.`;
 
 @Injectable()

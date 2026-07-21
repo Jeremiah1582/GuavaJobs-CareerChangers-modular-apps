@@ -48,4 +48,24 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       return false;
     }
   }
+
+  /** True when Redis accepted a connection (used to skip cache/rate-limit safely). */
+  isReady(): boolean {
+    return this.client.status === 'ready';
+  }
+
+  /**
+   * Run a Redis command when connected; returns null if Redis is down.
+   * Avoids throwing when enableOfflineQueue is false (local dev without Redis).
+   */
+  async runCommand<T>(fn: (client: Redis) => Promise<T>): Promise<T | null> {
+    if (!(await this.ping())) {
+      return null;
+    }
+    try {
+      return await fn(this.client);
+    } catch {
+      return null;
+    }
+  }
 }

@@ -99,15 +99,55 @@ export async function apiFetch<T>(
   }
 
   if (!res.ok) {
-    const payload = (await res.json().catch(() => null)) as ApiErrorBody | null;
+    const payload = (await res.json().catch(() => null)) as
+      | ApiErrorBody
+      | { message?: string | string[]; error?: string; statusCode?: number }
+      | null;
+
+    const nestMessage =
+      payload &&
+      typeof payload === "object" &&
+      "message" in payload &&
+      !("error" in payload && typeof (payload as ApiErrorBody).error === "object")
+        ? Array.isArray(payload.message)
+          ? payload.message.join(", ")
+          : typeof payload.message === "string"
+            ? payload.message
+            : undefined
+        : undefined;
+
+    const appMessage =
+      payload &&
+      typeof payload === "object" &&
+      "error" in payload &&
+      payload.error &&
+      typeof payload.error === "object" &&
+      "message" in payload.error
+        ? (payload as ApiErrorBody).error?.message
+        : undefined;
+
+    const errorCode = (payload as ApiErrorBody)?.error?.code;
+    const errorDetails = (payload as ApiErrorBody)?.error?.details;
+
+    const validationHint =
+      errorCode === "VALIDATION_ERROR" &&
+      errorDetails &&
+      typeof errorDetails === "object" &&
+      "issues" in errorDetails &&
+      Array.isArray((errorDetails as { issues: unknown }).issues)
+        ? formatZodIssues(
+            (errorDetails as { issues: ZodIssueLike[] }).issues,
+          )
+        : undefined;
+
     const fallback =
       res.status === 500 || res.status === 502 || res.status === 504
-        ? "API timed out or crashed (often a slow/reasoning LLM model). Use OPENAI_MODEL=deepseek/deepseek-chat, not r1."
+        ? "The API returned an error. Check that it is running and try again."
         : res.statusText || "Request failed";
-    throw new ApiError(payload?.error?.message ?? fallback, {
+    throw new ApiError(validationHint ?? appMessage ?? nestMessage ?? fallback, {
       status: res.status,
-      code: payload?.error?.code,
-      details: payload?.error?.details,
+      code: errorCode,
+      details: errorDetails,
     });
   }
 
@@ -116,6 +156,15 @@ export async function apiFetch<T>(
   }
 
   return (await res.json()) as T;
+}
+
+type ZodIssueLike = { path?: (string | number)[]; message?: string };
+
+function formatZodIssues(issues: ZodIssueLike[]): string | undefined {
+  const first = issues[0];
+  if (!first) return undefined;
+  const field = first.path?.length ? first.path.join(".") : "input";
+  return `${field}: ${first.message ?? "Invalid value"}`;
 }
 
 /** Binary responses (e.g. cover-letter PDF). */

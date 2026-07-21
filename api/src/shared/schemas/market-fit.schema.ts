@@ -21,6 +21,8 @@ export const marketFitSalaryBandSchema = z.object({
 export const marketFitRoleSchema = z.object({
   title: z.string().min(1).max(200),
   fitLevel: marketFitLevelSchema,
+  /** Evidence-weighted fit 0–100 (LLM); optional on legacy cached runs. */
+  matchScore: z.number().int().min(0).max(100).optional(),
   whyFit: z.string().min(1).max(800),
   evidenceSkills: z.array(z.string()).max(12),
   salary: marketFitSalaryBandSchema.nullable(),

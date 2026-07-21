@@ -14,7 +14,9 @@ export class JobCacheService {
   constructor(private readonly redis: RedisService) {}
 
   async getJob(canonicalKey: string): Promise<UnifiedJob | null> {
-    const raw = await this.redis.client.get(this.jobKey(canonicalKey));
+    const raw = await this.redis.runCommand((client) =>
+      client.get(this.jobKey(canonicalKey)),
+    );
     if (!raw) {
       return null;
     }
@@ -22,15 +24,19 @@ export class JobCacheService {
   }
 
   async setJob(job: UnifiedJob): Promise<void> {
-    await this.redis.client.setex(
-      this.jobKey(job.canonicalKey),
-      JOB_DETAIL_TTL_SECONDS,
-      JSON.stringify(job),
+    await this.redis.runCommand((client) =>
+      client.setex(
+        this.jobKey(job.canonicalKey),
+        JOB_DETAIL_TTL_SECONDS,
+        JSON.stringify(job),
+      ),
     );
   }
 
   async getSearch(cacheKey: string): Promise<JobSearchResponse | null> {
-    const raw = await this.redis.client.get(this.searchKey(cacheKey));
+    const raw = await this.redis.runCommand((client) =>
+      client.get(this.searchKey(cacheKey)),
+    );
     if (!raw) {
       return null;
     }
@@ -38,10 +44,12 @@ export class JobCacheService {
   }
 
   async setSearch(cacheKey: string, response: JobSearchResponse): Promise<void> {
-    await this.redis.client.setex(
-      this.searchKey(cacheKey),
-      SEARCH_TTL_SECONDS,
-      JSON.stringify(response),
+    await this.redis.runCommand((client) =>
+      client.setex(
+        this.searchKey(cacheKey),
+        SEARCH_TTL_SECONDS,
+        JSON.stringify(response),
+      ),
     );
   }
 

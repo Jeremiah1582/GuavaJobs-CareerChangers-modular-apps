@@ -56,12 +56,48 @@ export class JobsService {
 
     await this.rateLimit.checkAndIncrement();
 
-    const { listings, totalResults } = await this.adzuna.search({
-      q: query.q,
-      location: query.location,
-      country,
-      page: query.page,
-    });
+    let listings: AdzunaListing[];
+    let totalResults: number;
+    try {
+      ({ listings, totalResults } = await this.adzuna.search({
+        q: query.q,
+        location: query.location,
+        country,
+        page: query.page,
+      }));
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : 'Unknown Adzuna error';
+      this.logger.error(`Adzuna search failed: ${reason}`);
+      if (reason.includes('fetch failed') || reason.includes('timeout')) {
+        throw new AppError(
+          'JOBS_PROVIDER_UNAVAILABLE',
+          'Job search provider is temporarily unreachable. Try again in a moment.',
+          503,
+          { provider: 'adzuna' },
+        );
+      }
+      if (reason.includes('Adzuna search failed (401)') || reason.includes('(403)')) {
+        throw new AppError(
+          'JOBS_NOT_CONFIGURED',
+          'Adzuna API credentials are invalid or expired. Check ADZUNA_APP_ID and ADZUNA_API_KEY.',
+          503,
+        );
+      }
+      if (reason.includes('Adzuna search failed (404)')) {
+        throw new AppError(
+          'JOBS_MARKET_UNSUPPORTED',
+          `Adzuna does not support job search for country "${country}". Pick another market.`,
+          400,
+          { country },
+        );
+      }
+      throw new AppError(
+        'JOBS_PROVIDER_ERROR',
+        'Job search provider returned an error. Try different keywords or a nearby location.',
+        502,
+        { provider: 'adzuna', reason: reason.slice(0, 200) },
+      );
+    }
 
     const baseItems = await Promise.all(
       listings.map((listing) => this.listingToItem(listing, country)),

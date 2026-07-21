@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { RedisService } from '../../redis/redis.service';
 import { AppError } from '../../shared/schemas/error.schema';
 
@@ -7,6 +7,8 @@ const DAY_LIMIT = 250;
 
 @Injectable()
 export class AdzunaRateLimitService {
+  private readonly logger = new Logger(AdzunaRateLimitService.name);
+
   constructor(private readonly redis: RedisService) {}
 
   async checkAndIncrement(): Promise<void> {
@@ -14,14 +16,31 @@ export class AdzunaRateLimitService {
     const minuteKey = `adzuna:rate:minute:${formatMinute(now)}`;
     const dayKey = `adzuna:rate:day:${formatDay(now)}`;
 
-    const minuteCount = await this.redis.client.incr(minuteKey);
-    if (minuteCount === 1) {
-      await this.redis.client.expire(minuteKey, 120);
+    const minuteCount = await this.redis.runCommand(async (client) => {
+      const count = await client.incr(minuteKey);
+      if (count === 1) {
+        await client.expire(minuteKey, 120);
+      }
+      return count;
+    });
+
+    if (minuteCount === null) {
+      this.logger.warn(
+        'Redis unavailable — skipping Adzuna rate limit (start Redis for production limits)',
+      );
+      return;
     }
 
-    const dayCount = await this.redis.client.incr(dayKey);
-    if (dayCount === 1) {
-      await this.redis.client.expire(dayKey, 86_400);
+    const dayCount = await this.redis.runCommand(async (client) => {
+      const count = await client.incr(dayKey);
+      if (count === 1) {
+        await client.expire(dayKey, 86_400);
+      }
+      return count;
+    });
+
+    if (dayCount === null) {
+      return;
     }
 
     if (minuteCount > MINUTE_LIMIT) {
