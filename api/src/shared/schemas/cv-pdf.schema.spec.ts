@@ -5,13 +5,17 @@ import {
 import { generatedCvPdfQuerySchema } from './cv-pdf.schema';
 
 describe('cv-pdf.schema', () => {
-  it('defaults layout to classic', () => {
+  it('defaults layout to noir', () => {
     expect(generatedCvPdfQuerySchema.parse({})).toEqual({
       layout: DEFAULT_CV_PDF_LAYOUT,
     });
+    expect(DEFAULT_CV_PDF_LAYOUT).toBe('noir');
   });
 
-  it('accepts modern layout', () => {
+  it('accepts classic and modern layouts', () => {
+    expect(generatedCvPdfQuerySchema.parse({ layout: 'classic' })).toEqual({
+      layout: 'classic',
+    });
     expect(generatedCvPdfQuerySchema.parse({ layout: 'modern' })).toEqual({
       layout: 'modern',
     });
@@ -23,7 +27,7 @@ describe('cv-pdf.schema', () => {
     ).toThrow();
   });
 
-  it('exports both layout ids', () => {
-    expect(CV_PDF_LAYOUTS).toEqual(['classic', 'modern']);
+  it('exports three layout ids with noir first', () => {
+    expect(CV_PDF_LAYOUTS).toEqual(['noir', 'classic', 'modern']);
   });
 });

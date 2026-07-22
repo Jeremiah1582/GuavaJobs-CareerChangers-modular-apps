@@ -19,6 +19,7 @@ import { AppPageShell } from "@/components/app/app-page-shell";
 import { FreemiumLimitCard } from "@/components/app/freemium-limit-card";
 import { QuotaChip } from "@/components/app/quota-chip";
 import { ProfileAtsEasyRead } from "@/components/profile/profile-ats-easy-read";
+import { ProfileCompletenessRing } from "@/components/profile/profile-completeness-ring";
 import { MarketFitPanel } from "@/components/profile/market-fit-panel";
 import {
   PaperPanel,
@@ -35,6 +36,7 @@ import {
   type SeniorityLevel,
 } from "@/lib/onboarding";
 import { ADZUNA_COUNTRIES, normalizeAdzunaCountry } from "@/lib/adzuna-countries";
+import { computeCompletenessFromDraft } from "@/lib/profile-completeness";
 import { createClient } from "@/lib/supabase/client";
 
 const saveButtonClass =
@@ -420,6 +422,23 @@ export function ProfileEditor() {
             limit={me.usage.aiGenerationsLimit}
           />
         </div>
+      ) : null}
+
+      {profile ? (
+        <PaperPanel className="mb-6 border-guava-green/20 p-5 md:p-6">
+          <ProfileCompletenessRing
+            completeness={computeCompletenessFromDraft({
+              jobTitle,
+              primaryIndustry: industry,
+              seniority,
+              skills,
+              locationCity,
+              locationCountry,
+              currentCvId: profile.currentCvId,
+              parseStatus: parseStatus ?? profile.currentCv?.parseStatus ?? null,
+            })}
+          />
+        </PaperPanel>
       ) : null}
 
       <form onSubmit={saveAccount} className="space-y-4">

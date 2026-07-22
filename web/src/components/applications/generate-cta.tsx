@@ -1,19 +1,26 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CircleNotch, Sparkle } from "@phosphor-icons/react";
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { apiFetch, ApiError } from "@/api/client";
-import type { ApplicationResponse, MeResponse } from "@/api/types";
+import type {
+  ApplicationResponse,
+  MeResponse,
+  ProfileDetail,
+} from "@/api/types";
+import { ApplicationRevealModal } from "@/components/applications/application-reveal-modal";
 import { QuotaChip } from "@/components/app/quota-chip";
 import { QuotaSheet } from "@/components/applications/quota-sheet";
+import { GenerateSoftGate } from "@/components/profile/profile-completeness-ring";
 import { AnalyticsEvents, track } from "@/lib/analytics";
 import { setHasApplicationsCookie, applicationTitle } from "@/lib/applications";
 import {
   requestGenerationNotificationPermission,
   watchGeneration,
 } from "@/lib/generation-watch";
+import { computeCompleteness } from "@/lib/profile-completeness";
 import { getAccessToken } from "@/lib/session";
 
 export function GenerateCta({
@@ -33,10 +40,12 @@ export function GenerateCta({
   };
 }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const idempotencyKey = useRef<string | null>(null);
   const [quotaOpen, setQuotaOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nextAction, setNextAction] = useState<string | null>(null);
+  const [revealId, setRevealId] = useState<string | null>(null);
 
   const meQuery = useQuery({
     queryKey: ["me"] as const,
@@ -49,10 +58,44 @@ export function GenerateCta({
 
   const used = meQuery.data?.usage.aiGenerationsUsedPeriod ?? 0;
   const limit = meQuery.data?.usage.aiGenerationsLimit ?? null;
-  const atLimit =
-    limit != null && used >= limit;
+  const atLimit = limit != null && used >= limit;
   const profileId =
     meQuery.data?.defaultProfileId ?? meQuery.data?.defaultProfile?.id ?? null;
+
+  const profileQuery = useQuery({
+    queryKey: ["profile", profileId] as const,
+    enabled: !!profileId,
+    queryFn: async () => {
+      const token = await getAccessToken();
+      return apiFetch<ProfileDetail>(`/profiles/${profileId}`, { token });
+    },
+    staleTime: 30_000,
+  });
+
+  const softGateTip = profileQuery.data
+    ? computeCompleteness({
+        jobTitle: profileQuery.data.jobTitle,
+        primaryIndustry: profileQuery.data.primaryIndustry,
+        seniority: profileQuery.data.seniority,
+        skills: profileQuery.data.skills,
+        locationCity: profileQuery.data.locationCity,
+        locationCountry: profileQuery.data.locationCountry,
+        currentCvId: profileQuery.data.currentCvId,
+        parseStatus: profileQuery.data.currentCv?.parseStatus ?? null,
+      }).softGateTip
+    : null;
+
+  const closeReveal = useCallback(() => {
+    setRevealId(null);
+  }, []);
+
+  const reviewDraft = useCallback(
+    (id: string) => {
+      setRevealId(null);
+      router.push(`/app/applications/${id}`);
+    },
+    [router],
+  );
 
   const generateMutation = useMutation({
     mutationFn: async () => {
@@ -103,6 +146,7 @@ export function GenerateCta({
         kind: "package",
         title: applicationTitle(data),
       });
+      void queryClient.invalidateQueries({ queryKey: ["me"] });
       if (
         data.generationStatus === "PENDING" ||
         data.generationStatus === "PROCESSING"
@@ -112,7 +156,8 @@ export function GenerateCta({
           canonicalJobKey,
         });
       }
-      router.push(`/app/applications/${data.id}`);
+      // Stay on jobs — reveal modal polls until complete (draft-first, never blind submit).
+      setRevealId(data.id);
     },
     onError: (err) => {
       if (err instanceof ApiError && err.code === "QUOTA_EXCEEDED") {
@@ -144,7 +189,9 @@ export function GenerateCta({
       }
       if (err instanceof ApiError && err.code === "QUEUE_UNAVAILABLE") {
         setError(err.message);
-        setNextAction("The AI worker queue is temporarily down. Try again in a minute.");
+        setNextAction(
+          "The AI worker queue is temporarily down. Try again in a minute.",
+        );
         return;
       }
       setError(
@@ -165,7 +212,8 @@ export function GenerateCta({
             generateMutation.isPending ||
             meQuery.isLoading ||
             atLimit ||
-            !profileId
+            !profileId ||
+            !!revealId
           }
           onClick={() => {
             if (atLimit) {
@@ -187,7 +235,9 @@ export function GenerateCta({
           )}
           {generateMutation.isPending
             ? "Starting…"
-            : "Generate application"}
+            : revealId
+              ? "Generating…"
+              : "Generate application"}
         </button>
         {meQuery.data ? (
           <QuotaChip used={used} limit={limit} />
@@ -210,7 +260,9 @@ export function GenerateCta({
             See options
           </button>
         </p>
-      ) : null}
+      ) : (
+        <GenerateSoftGate tip={softGateTip} />
+      )}
 
       {error ? (
         <div role="alert">
@@ -231,6 +283,13 @@ export function GenerateCta({
       ) : null}
 
       <QuotaSheet open={quotaOpen} onClose={() => setQuotaOpen(false)} />
+
+      <ApplicationRevealModal
+        open={!!revealId}
+        applicationId={revealId}
+        onKeepSearching={closeReveal}
+        onReviewDraft={reviewDraft}
+      />
     </div>
   );
 }

@@ -11,6 +11,7 @@ import type { HydratedGeneratedCvExport } from '../shared/schemas/generated-cv.s
 import { AppError } from '../shared/schemas/error.schema';
 import { ClassicCvDocument } from './templates/cv-classic';
 import { ModernCvDocument } from './templates/cv-modern';
+import { NoirCvDocument } from './templates/cv-noir';
 
 @Injectable()
 export class PdfService {
@@ -97,7 +98,9 @@ export class PdfService {
     const document =
       layout === 'modern'
         ? createElement(ModernCvDocument, { cv: params.content })
-        : createElement(ClassicCvDocument, { cv: params.content });
+        : layout === 'classic'
+          ? createElement(ClassicCvDocument, { cv: params.content })
+          : createElement(NoirCvDocument, { cv: params.content });
 
     const buffer = await renderToBuffer(
       document as ReactElement<DocumentProps>,

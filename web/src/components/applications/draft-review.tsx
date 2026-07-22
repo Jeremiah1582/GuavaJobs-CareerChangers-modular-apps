@@ -158,40 +158,35 @@ function OverviewMaterials({
 
   return (
     <div className="space-y-6">
-      {showLetter || showAts ? (
-        <div className="grid gap-6 md:grid-cols-2 md:items-start">
-          {showLetter ? (
-            <CoverLetterEditor
-              content={app.coverLetterContent ?? ""}
-              edited={app.coverLetterEdited}
-              saving={savePending}
-              saveError={saveError}
-              onSave={onSaveLetter}
-            />
-          ) : (
-            <div />
-          )}
-          {showAts ? (
-            app.atsReport ? (
-              <AtsReportPanel
-                applicationId={app.id}
-                report={app.atsReport}
-                careerEnrichments={app.careerEnrichments}
-                onApplicationUpdated={onApplicationUpdated}
-              />
-            ) : isAi && completed ? (
-              <PaperPanel className="border-guava-green/20 p-6">
-                <h2 className="text-base font-semibold tracking-tight">
-                  Fit report
-                </h2>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  No ATS report attached. Regenerate to produce a fresh fit
-                  assessment.
-                </p>
-              </PaperPanel>
-            ) : null
-          ) : null}
-        </div>
+      {showLetter ? (
+        <CoverLetterEditor
+          content={app.coverLetterContent ?? ""}
+          edited={app.coverLetterEdited}
+          saving={savePending}
+          saveError={saveError}
+          onSave={onSaveLetter}
+        />
+      ) : null}
+
+      {showAts ? (
+        app.atsReport ? (
+          <AtsReportPanel
+            applicationId={app.id}
+            report={app.atsReport}
+            careerEnrichments={app.careerEnrichments}
+            onApplicationUpdated={onApplicationUpdated}
+          />
+        ) : isAi && completed ? (
+          <PaperPanel className="border-guava-green/20 p-6">
+            <h2 className="text-base font-semibold tracking-tight">
+              Fit report
+            </h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              No ATS report attached. Regenerate to produce a fresh fit
+              assessment.
+            </p>
+          </PaperPanel>
+        ) : null
       ) : null}
 
       {showCv ? (

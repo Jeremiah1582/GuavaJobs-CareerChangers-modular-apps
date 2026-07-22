@@ -1,14 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Heart, MagnifyingGlass } from "@phosphor-icons/react";
 import { apiFetch, ApiError, publicApiFetch } from "@/api/client";
 import type {
+  JobListItem,
   JobSearchResponse,
   MarketFitResponse,
   MeResponse,
   ProfileResponse,
+  SavedJobKeysResponse,
+  SavedJobResponse,
+  SavedJobsListResponse,
+  SavedJobResolveStatus,
 } from "@/api/types";
 import { JobsBoard } from "@/components/jobs/jobs-board";
 import {
@@ -18,7 +24,7 @@ import {
 import { ErrorState } from "@/components/ui/state-panel";
 import { useSavedJobSearches } from "@/hooks/use-saved-job-searches";
 import { AnalyticsEvents, track } from "@/lib/analytics";
-import { deriveJobSearchDefaults } from "@/lib/jobs";
+import { deriveJobSearchDefaults, savedJobToListItem } from "@/lib/jobs";
 import { formatJobSearchError } from "@/lib/job-search-errors";
 import { normalizeAdzunaCountry } from "@/lib/adzuna-countries";
 import { useOnlineStatus } from "@/lib/online";
@@ -27,6 +33,8 @@ import { getAccessTokenOrNull } from "@/lib/session";
 type JobFeedProps = {
   mode?: "app" | "public";
 };
+
+type FeedView = "search" | "bookmarked";
 
 type SubmittedSearch = {
   q: string;
@@ -40,17 +48,21 @@ function readUrlSearch(searchParams: URLSearchParams): {
   where: string | null;
   country: string | null;
   page: number;
+  view: FeedView;
   hasExplicit: boolean;
 } {
   const q = searchParams.get("q");
   const where = searchParams.get("where");
   const country = searchParams.get("country");
   const page = Number(searchParams.get("page") ?? "1") || 1;
+  const view =
+    searchParams.get("view") === "bookmarked" ? "bookmarked" : "search";
   return {
     q,
     where,
     country,
     page,
+    view,
     /** Custom search when keywords, location, or country are in the URL. */
     hasExplicit: q !== null || where !== null || country !== null,
   };
@@ -61,9 +73,11 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
 
   const selectedKey = searchParams.get("job");
   const urlSearch = readUrlSearch(searchParams);
+  const feedView = mode === "app" ? urlSearch.view : "search";
 
   const [query, setQuery] = useState(urlSearch.q ?? "");
   const [location, setLocation] = useState(urlSearch.where ?? "");
@@ -76,9 +90,13 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
     country: normalizeAdzunaCountry(urlSearch.country),
     page: urlSearch.page,
   });
+  const [bookmarkPendingKey, setBookmarkPendingKey] = useState<string | null>(
+    null,
+  );
 
   /** Wait for profile defaults before first search in app mode (no URL overrides). */
-  const needsProfileDefaults = mode === "app" && !urlSearch.hasExplicit;
+  const needsProfileDefaults =
+    mode === "app" && !urlSearch.hasExplicit && feedView === "search";
   const [defaultsReady, setDefaultsReady] = useState(!needsProfileDefaults);
   const defaultsApplied = useRef(false);
 
@@ -141,6 +159,104 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
     mode === "app",
   );
 
+  const bookmarkKeysQuery = useQuery({
+    queryKey: ["saved-job-keys"] as const,
+    queryFn: async () => {
+      const token = await getAccessTokenOrNull();
+      if (!token) return { canonicalKeys: [] as string[] };
+      return apiFetch<SavedJobKeysResponse>("/saved-jobs/keys", { token });
+    },
+    enabled: mode === "app" && online,
+    staleTime: 30_000,
+  });
+
+  const bookmarkedKeys = useMemo(
+    () => new Set(bookmarkKeysQuery.data?.canonicalKeys ?? []),
+    [bookmarkKeysQuery.data?.canonicalKeys],
+  );
+
+  const bookmarksQuery = useQuery({
+    queryKey: ["saved-jobs", "resolve"] as const,
+    queryFn: async () => {
+      const token = await getAccessTokenOrNull();
+      if (!token) return { results: [] as SavedJobResponse[] };
+      return apiFetch<SavedJobsListResponse>("/saved-jobs?resolve=1", {
+        token,
+      });
+    },
+    enabled: mode === "app" && online && feedView === "bookmarked",
+    staleTime: 15_000,
+  });
+
+  const goneTracked = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (feedView !== "bookmarked" || !bookmarksQuery.data) return;
+    for (const row of bookmarksQuery.data.results) {
+      if (
+        row.resolveStatus === "GONE" &&
+        !goneTracked.current.has(row.canonicalKey)
+      ) {
+        goneTracked.current.add(row.canonicalKey);
+        track(AnalyticsEvents.bookmark_resolve_gone, {
+          canonicalJobKey: row.canonicalKey,
+        });
+      }
+    }
+  }, [feedView, bookmarksQuery.data]);
+
+  const toggleBookmark = useMutation({
+    mutationFn: async (job: JobListItem) => {
+      const token = await getAccessTokenOrNull();
+      if (!token) {
+        throw new ApiError("Sign in to bookmark jobs.", {
+          status: 401,
+          code: "UNAUTHORIZED",
+        });
+      }
+      const key = job.canonicalKey;
+      const isBookmarked = bookmarkedKeys.has(key);
+      if (isBookmarked) {
+        await apiFetch(`/saved-jobs/${encodeURIComponent(key)}`, {
+          method: "DELETE",
+          token,
+        });
+        return { key, bookmarked: false as const };
+      }
+      await apiFetch<SavedJobResponse>("/saved-jobs", {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          canonicalKey: key,
+          title: job.title,
+          company: job.company,
+          location: job.location,
+          atsType: job.atsType,
+          salaryMin: job.salaryMin ?? null,
+          salaryMax: job.salaryMax ?? null,
+          salaryCurrency: job.salaryCurrency ?? null,
+        }),
+      });
+      return { key, bookmarked: true as const };
+    },
+    onMutate: (job) => {
+      setBookmarkPendingKey(job.canonicalKey);
+    },
+    onSuccess: (result) => {
+      track(
+        result.bookmarked
+          ? AnalyticsEvents.job_bookmarked
+          : AnalyticsEvents.job_unbookmarked,
+        { canonicalJobKey: result.key },
+      );
+      void queryClient.invalidateQueries({ queryKey: ["saved-job-keys"] });
+      void queryClient.invalidateQueries({ queryKey: ["saved-jobs"] });
+    },
+    onSettled: () => {
+      setBookmarkPendingKey(null);
+    },
+  });
+
   useEffect(() => {
     if (!needsProfileDefaults || defaultsApplied.current) return;
     if (profileDefaultsQuery.isPending || profileDefaultsQuery.isFetching) {
@@ -194,7 +310,7 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
         token: token ?? undefined,
       });
     },
-    enabled: online && defaultsReady,
+    enabled: online && defaultsReady && feedView === "search",
     staleTime: 30_000,
     retry: 1,
   });
@@ -206,6 +322,7 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
       country?: string;
       page?: number;
       job?: string | null;
+      view?: FeedView;
     }) => {
       const params = new URLSearchParams();
       const q = opts.q ?? submitted.q;
@@ -213,17 +330,23 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
       const country = opts.country ?? submitted.country;
       const page = opts.page ?? submitted.page;
       const job = opts.job === undefined ? selectedKey : opts.job;
+      const view = opts.view ?? feedView;
 
-      if (q.trim()) params.set("q", q.trim());
-      if (loc.trim()) params.set("where", loc.trim());
-      if (country) params.set("country", country);
-      if (page > 1) params.set("page", String(page));
+      if (view === "bookmarked") {
+        params.set("view", "bookmarked");
+      } else {
+        if (q.trim()) params.set("q", q.trim());
+        if (loc.trim()) params.set("where", loc.trim());
+        if (country) params.set("country", country);
+        if (page > 1) params.set("page", String(page));
+      }
       if (job) params.set("job", job);
 
       const qs = params.toString();
       router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
     },
     [
+      feedView,
       pathname,
       router,
       selectedKey,
@@ -234,6 +357,10 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
     ],
   );
 
+  function setFeedView(next: FeedView) {
+    syncUrl({ view: next, job: null, page: 1 });
+  }
+
   function onSearch() {
     const next: SubmittedSearch = {
       q: query,
@@ -242,7 +369,7 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
       page: 1,
     };
     setSubmitted(next);
-    syncUrl({ ...next, job: null });
+    syncUrl({ ...next, job: null, view: "search" });
     track(AnalyticsEvents.job_search, {
       q: query.trim() || null,
       location: location.trim() || null,
@@ -266,7 +393,7 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
       page: 1,
     };
     setSubmitted(next);
-    syncUrl({ ...next, job: null });
+    syncUrl({ ...next, job: null, view: "search" });
     track(AnalyticsEvents.job_search, {
       q: criterion.q,
       location: nextLocation.trim() || null,
@@ -302,6 +429,19 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
   }, [syncUrl]);
 
   const data = searchQuery.data;
+  const bookmarkJobs = useMemo(
+    () => (bookmarksQuery.data?.results ?? []).map(savedJobToListItem),
+    [bookmarksQuery.data?.results],
+  );
+  const resolveStatusByKey = useMemo(() => {
+    const map: Record<string, SavedJobResolveStatus> = {};
+    for (const row of bookmarksQuery.data?.results ?? []) {
+      map[row.canonicalKey] = row.resolveStatus;
+    }
+    return map;
+  }, [bookmarksQuery.data?.results]);
+
+  const boardJobs = feedView === "bookmarked" ? bookmarkJobs : (data?.results ?? []);
   const totalPages =
     data && data.totalResults > 0
       ? Math.max(1, Math.ceil(data.totalResults / 20))
@@ -314,7 +454,7 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
     (searchQuery.isFetching && !searchQuery.isFetched);
 
   const pagination =
-    data && data.results.length > 0 ? (
+    feedView === "search" && data && data.results.length > 0 ? (
       <div className="flex flex-wrap items-center justify-between gap-3">
         <button
           type="button"
@@ -347,10 +487,10 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
     ) : null;
 
   const desktopBoardFooter =
-    pagination || data?.attribution ? (
+    pagination || (feedView === "search" && data?.attribution) ? (
       <>
         {pagination}
-        {data?.attribution ? (
+        {feedView === "search" && data?.attribution ? (
           <p className="text-center text-xs text-muted-foreground">
             {data.attribution}
           </p>
@@ -361,36 +501,109 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
   const searchError = searchQuery.isError
     ? formatJobSearchError(searchQuery.error)
     : null;
+  const bookmarksError =
+    bookmarksQuery.isError && feedView === "bookmarked"
+      ? bookmarksQuery.error instanceof Error
+        ? bookmarksQuery.error.message
+        : "Could not load bookmarks."
+      : null;
 
   return (
     <div className="flex min-h-0 w-full min-w-0 max-w-full flex-col gap-5 overflow-x-hidden lg:min-h-0 lg:flex-1 lg:gap-4 lg:overflow-hidden">
-      <div className="min-w-0 shrink-0">
-        <JobsSearchBar
-          query={query}
-          location={location}
-          country={country}
-          onQueryChange={setQuery}
-          onLocationChange={setLocation}
-          onCountryChange={(value) => setCountry(normalizeAdzunaCountry(value))}
-          onSubmit={onSearch}
-          pending={searchPending}
-          recommendedCriteria={recommendedCriteria}
-          savedSearches={savedSearches}
-          allowSave={mode === "app"}
-          onCriterionSelect={onCriterionSelect}
-          onSaveSearch={onSaveSearch}
-          onRemoveSaved={remove}
-        />
-      </div>
+      {mode === "app" ? (
+        <div
+          className="flex shrink-0 gap-2"
+          role="tablist"
+          aria-label="Jobs views"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={feedView === "search"}
+            onClick={() => setFeedView("search")}
+            className={[
+              "inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-colors",
+              feedView === "search"
+                ? "border-guava-green/40 bg-guava-green/10 text-foreground"
+                : "border-border/80 text-muted-foreground hover:border-guava-green/30",
+            ].join(" ")}
+          >
+            <MagnifyingGlass className="size-3.5" weight="bold" />
+            Search
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={feedView === "bookmarked"}
+            onClick={() => setFeedView("bookmarked")}
+            className={[
+              "inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-colors",
+              feedView === "bookmarked"
+                ? "border-guava-pink/40 bg-guava-pink/10 text-foreground"
+                : "border-border/80 text-muted-foreground hover:border-guava-pink/30",
+            ].join(" ")}
+          >
+            <Heart
+              className="size-3.5"
+              weight={feedView === "bookmarked" ? "fill" : "regular"}
+            />
+            Bookmarked
+            {bookmarkedKeys.size > 0 ? (
+              <span className="font-mono text-[10px] text-muted-foreground">
+                {bookmarkedKeys.size}
+              </span>
+            ) : null}
+          </button>
+        </div>
+      ) : null}
+
+      {feedView === "search" ? (
+        <div className="min-w-0 shrink-0">
+          <JobsSearchBar
+            query={query}
+            location={location}
+            country={country}
+            onQueryChange={setQuery}
+            onLocationChange={setLocation}
+            onCountryChange={(value) =>
+              setCountry(normalizeAdzunaCountry(value))
+            }
+            onSubmit={onSearch}
+            pending={searchPending}
+            recommendedCriteria={recommendedCriteria}
+            savedSearches={savedSearches}
+            allowSave={mode === "app"}
+            onCriterionSelect={onCriterionSelect}
+            onSaveSearch={onSaveSearch}
+            onRemoveSaved={remove}
+          />
+        </div>
+      ) : (
+        <p className="shrink-0 text-sm text-muted-foreground">
+          Pointers only — we re-check each listing. Gone means the post was
+          taken down.
+        </p>
+      )}
 
       {!online ? (
         <ErrorState
           title="You're offline"
           message="Job search needs a network connection."
           nextAction="Reconnect, then retry search."
-          onRetry={() => void searchQuery.refetch()}
+          onRetry={() =>
+            feedView === "bookmarked"
+              ? void bookmarksQuery.refetch()
+              : void searchQuery.refetch()
+          }
         />
-      ) : searchError ? (
+      ) : feedView === "bookmarked" && bookmarksError ? (
+        <ErrorState
+          title="Bookmarks failed"
+          message={bookmarksError}
+          nextAction="Check your connection, then retry."
+          onRetry={() => void bookmarksQuery.refetch()}
+        />
+      ) : feedView === "search" && searchError ? (
         <ErrorState
           title="Search failed"
           message={searchError.message}
@@ -399,7 +612,7 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
         />
       ) : (
         <>
-          {data && data.results.length > 0 ? (
+          {feedView === "search" && data && data.results.length > 0 ? (
             <p className="shrink-0 text-sm text-muted-foreground">
               <span className="font-medium text-foreground">
                 {data.totalResults.toLocaleString()}
@@ -412,20 +625,47 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
             </p>
           ) : null}
 
+          {feedView === "bookmarked" && bookmarkJobs.length > 0 ? (
+            <p className="shrink-0 text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">
+                {bookmarkJobs.length}
+              </span>{" "}
+              bookmarked {bookmarkJobs.length === 1 ? "role" : "roles"}
+            </p>
+          ) : null}
+
           <JobsBoard
-            jobs={data?.results ?? []}
-            loading={awaitingDefaults || searchQuery.isLoading}
+            jobs={boardJobs}
+            loading={
+              feedView === "bookmarked"
+                ? bookmarksQuery.isLoading
+                : awaitingDefaults || searchQuery.isLoading
+            }
             selectedKey={selectedKey}
             onSelect={selectJob}
             onClear={clearSelection}
             mode={mode}
-            emptyMessage={`Try broader keywords or a different location. Searching ${marketLabel}.`}
+            emptyMessage={
+              feedView === "bookmarked"
+                ? "Heart a role from Search to shortlist it here."
+                : `Try broader keywords or a different location. Searching ${marketLabel}.`
+            }
             footer={desktopBoardFooter}
+            bookmarkedKeys={mode === "app" ? bookmarkedKeys : undefined}
+            onToggleBookmark={
+              mode === "app"
+                ? (job) => toggleBookmark.mutate(job)
+                : undefined
+            }
+            bookmarkPendingKey={bookmarkPendingKey}
+            resolveStatusByKey={
+              feedView === "bookmarked" ? resolveStatusByKey : undefined
+            }
           />
 
           {pagination ? <div className="lg:hidden">{pagination}</div> : null}
 
-          {data?.attribution ? (
+          {feedView === "search" && data?.attribution ? (
             <p className="text-center text-xs text-muted-foreground lg:hidden">
               {data.attribution}
             </p>

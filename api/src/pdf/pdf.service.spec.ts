@@ -13,6 +13,7 @@ jest.mock('@react-pdf/renderer', () => ({
 }));
 
 import { hydratedGeneratedCvExportSchema } from '../shared/schemas/generated-cv.schema';
+import { DEFAULT_CV_PDF_LAYOUT } from '../shared/constants/cv-pdf-layouts';
 import { normalizeCvPdfLayout, PdfService } from './pdf.service';
 
 const sampleExport = hydratedGeneratedCvExportSchema.parse({
@@ -63,6 +64,15 @@ const sampleExport = hydratedGeneratedCvExportSchema.parse({
 describe('PdfService', () => {
   const service = new PdfService();
 
+  it('renders noir (default) CV PDF to a non-empty buffer', async () => {
+    const buffer = await service.generatedCvPdf({
+      content: sampleExport,
+      layout: 'noir',
+    });
+    expect(buffer.length).toBeGreaterThan(10);
+    expect(buffer.subarray(0, 4).toString()).toBe('%PDF');
+  });
+
   it('renders classic CV PDF to a non-empty buffer', async () => {
     const buffer = await service.generatedCvPdf({
       content: sampleExport,
@@ -95,8 +105,9 @@ describe('PdfService', () => {
 });
 
 describe('normalizeCvPdfLayout', () => {
-  it('defaults to classic', () => {
-    expect(normalizeCvPdfLayout(undefined)).toBe('classic');
+  it('defaults to noir', () => {
+    expect(normalizeCvPdfLayout(undefined)).toBe(DEFAULT_CV_PDF_LAYOUT);
+    expect(DEFAULT_CV_PDF_LAYOUT).toBe('noir');
   });
 
   it('rejects unknown layout', () => {

@@ -203,15 +203,51 @@ export async function apiFetchBlob(
 
   if (!res.ok) {
     const payload = (await res.json().catch(() => null)) as ApiErrorBody | null;
+    const nestMessage =
+      typeof (payload as { message?: unknown } | null)?.message === "string"
+        ? (payload as { message: string }).message
+        : undefined;
+    const raw =
+      payload?.error?.message ?? nestMessage ?? res.statusText ?? "Request failed";
+    const message =
+      res.status === 404 && /generated-cv\/pdf/i.test(path)
+        ? "CV PDF export is not available on this API yet. Point API_UPSTREAM at a build that includes POST /applications/:id/generated-cv/pdf (local API works)."
+        : raw;
+    throw new ApiError(message, {
+      status: res.status,
+      code: payload?.error?.code,
+      details: payload?.error?.details,
+    });
+  }
+
+  const blob = await res.blob();
+  const contentType = res.headers.get("Content-Type") || blob.type || "";
+  if (
+    /generated-cv\/pdf|cover-letter\/pdf/i.test(path) &&
+    !/pdf/i.test(contentType) &&
+    !/pdf/i.test(blob.type)
+  ) {
+    // Some proxies return 200 HTML/JSON under the wrong status; treat as failure.
     throw new ApiError(
-      payload?.error?.message ?? res.statusText ?? "Request failed",
-      {
-        status: res.status,
-        code: payload?.error?.code,
-        details: payload?.error?.details,
-      },
+      "API returned a non-PDF response for CV/cover-letter download. Check API_UPSTREAM and that the PDF route is deployed.",
+      { status: res.status, code: "INVALID_PDF_RESPONSE" },
     );
   }
 
-  return res.blob();
+  return blob.type ? blob : new Blob([blob], { type: contentType || "application/pdf" });
+}
+
+/** Trigger a file download from a Blob without racing revokeObjectURL. */
+export function downloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.rel = "noopener";
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Defer revoke so Chromium finishes the download navigation.
+  window.setTimeout(() => URL.revokeObjectURL(url), 2_000);
 }

@@ -138,6 +138,7 @@ model User {
   applications     Application[]
   generatedCvs     GeneratedCv[]
   profileCareerCvs ProfileCareerCv[]
+  savedJobs        SavedJob[]
 
   @@index([email])
   @@map("users")
@@ -432,4 +433,38 @@ model ApplicationEvent {
   @@index([applicationId, eventType])
   @@index([applicationId, occurredAt])
   @@map("application_events")
+}
+
+// ─── Saved job bookmark (pointer only — re-pull live details; §10.5) ───────────
+
+enum SavedJobResolveStatus {
+  LIVE
+  GONE
+  UNKNOWN
+}
+
+model SavedJob {
+  id            String                 @id @default(cuid())
+  userId        String
+  canonicalKey  String
+  savedAt       DateTime               @default(now())
+  // Thin card cache — not source of truth; never store full JD here.
+  title         String?
+  company       String?
+  location      String?
+  atsType       String?
+  salaryMin     Int?
+  salaryMax     Int?
+  salaryCurrency String?
+  lastResolvedAt DateTime?
+  resolveStatus SavedJobResolveStatus  @default(UNKNOWN)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, canonicalKey])
+  @@index([userId, savedAt])
+  @@map("saved_jobs")
 }

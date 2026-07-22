@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { CircleNotch, MagnifyingGlass } from "@phosphor-icons/react";
-import type { JobListItem } from "@/api/types";
+import type { JobListItem, SavedJobResolveStatus } from "@/api/types";
 import { JobCard } from "@/components/jobs/job-card";
 import { JobDetailPanel } from "@/components/jobs/job-detail-panel";
 
@@ -35,6 +35,10 @@ type JobsBoardProps = {
   emptyMessage?: string;
   /** Pagination / attribution pinned below the desktop split pane */
   footer?: ReactNode;
+  bookmarkedKeys?: Set<string>;
+  onToggleBookmark?: (job: JobListItem) => void;
+  bookmarkPendingKey?: string | null;
+  resolveStatusByKey?: Record<string, SavedJobResolveStatus>;
 };
 
 export function JobsBoard({
@@ -46,6 +50,10 @@ export function JobsBoard({
   mode = "app",
   emptyMessage = "No jobs found. Try a different search.",
   footer,
+  bookmarkedKeys,
+  onToggleBookmark,
+  bookmarkPendingKey,
+  resolveStatusByKey,
 }: JobsBoardProps) {
   const reduceMotion = useReducedMotion();
   const isLgDesktop = useIsLgDesktop();
@@ -88,6 +96,10 @@ export function JobsBoard({
         job={job}
         isSelected={activeJob?.canonicalKey === job.canonicalKey}
         onSelect={onSelect}
+        bookmarked={bookmarkedKeys?.has(job.canonicalKey)}
+        onToggleBookmark={onToggleBookmark}
+        bookmarkPending={bookmarkPendingKey === job.canonicalKey}
+        resolveStatus={resolveStatusByKey?.[job.canonicalKey]}
       />
     </li>
   ));

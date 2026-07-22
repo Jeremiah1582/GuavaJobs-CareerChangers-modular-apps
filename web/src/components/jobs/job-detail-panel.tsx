@@ -18,7 +18,7 @@ import { GenerateCta } from "@/components/applications/generate-cta";
 import { ApplyGateModal } from "@/components/jobs/apply-gate-modal";
 import { paperInputClass } from "@/components/ui/paper-panel";
 import { AnalyticsEvents, track } from "@/lib/analytics";
-import { formatSalary } from "@/lib/jobs";
+import { atsTypeLabel, formatSalary, inferWorkplace } from "@/lib/jobs";
 import {
   setPendingJobCookie,
   signUpUrlForPendingJob,
@@ -108,6 +108,8 @@ export function JobDetailPanel({
     (job ?? summary).salaryMax,
     (job ?? summary).salaryCurrency,
   );
+  const workplace = inferWorkplace((job ?? summary).location);
+  const atsLabel = atsTypeLabel((job ?? summary).atsType);
   const apiDescription =
     job?.description?.trim() ||
     summary.snippet ||
@@ -184,7 +186,19 @@ export function JobDetailPanel({
                 {summary.location}
               </span>
             ) : null}
-            {salary ? <span>{salary}</span> : null}
+            {workplace ? (
+              <span className="rounded-md bg-guava-green/10 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-guava-green">
+                {workplace}
+              </span>
+            ) : null}
+            {salary ? (
+              <span className="font-medium text-foreground/80">{salary}</span>
+            ) : null}
+            {atsLabel ? (
+              <span className="rounded-md border border-border/80 px-2 py-0.5 text-xs font-medium uppercase tracking-wide">
+                {atsLabel}
+              </span>
+            ) : null}
           </div>
         </header>
 

@@ -129,6 +129,42 @@ export type JobSearchResponse = {
   attribution: "Jobs by Adzuna" | "Company career pages";
 };
 
+export type SavedJobResolveStatus = "LIVE" | "GONE" | "UNKNOWN";
+
+export type SavedJobResponse = {
+  id: string;
+  canonicalKey: string;
+  savedAt: string;
+  title: string | null;
+  company: string | null;
+  location: string | null;
+  atsType: string | null;
+  salaryMin: number | null;
+  salaryMax: number | null;
+  salaryCurrency: string | null;
+  lastResolvedAt: string | null;
+  resolveStatus: SavedJobResolveStatus;
+};
+
+export type SavedJobsListResponse = {
+  results: SavedJobResponse[];
+};
+
+export type SavedJobKeysResponse = {
+  canonicalKeys: string[];
+};
+
+export type SaveJobBody = {
+  canonicalKey: string;
+  title?: string;
+  company?: string;
+  location?: string | null;
+  atsType?: JobListItem["atsType"];
+  salaryMin?: number | null;
+  salaryMax?: number | null;
+  salaryCurrency?: string | null;
+};
+
 export type UnifiedJob = JobListItem & {
   description: string;
   source: "adzuna" | "ats_direct";

@@ -15,6 +15,7 @@ import { QueueModule } from './queue/queue.module';
 import { RedisModule } from './redis/redis.module';
 import { UsersModule } from './users/users.module';
 import { MarketFitModule } from './market-fit/market-fit.module';
+import { SavedJobsModule } from './saved-jobs/saved-jobs.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { MarketFitModule } from './market-fit/market-fit.module';
     AssessmentsModule,
     MarketFitModule,
     JobsModule,
+    SavedJobsModule,
     ApplicationsModule,
     AutofillModule,
     HealthModule,
