@@ -24,7 +24,7 @@ import {
 import { ErrorState } from "@/components/ui/state-panel";
 import { useSavedJobSearches } from "@/hooks/use-saved-job-searches";
 import { AnalyticsEvents, track } from "@/lib/analytics";
-import { deriveJobSearchDefaults, savedJobToListItem } from "@/lib/jobs";
+import { deriveJobSearchDefaults, normalizeBookmarkKey, savedJobToListItem } from "@/lib/jobs";
 import { formatJobSearchError } from "@/lib/job-search-errors";
 import { normalizeAdzunaCountry } from "@/lib/adzuna-countries";
 import { useOnlineStatus } from "@/lib/online";
@@ -93,6 +93,7 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
   const [bookmarkPendingKey, setBookmarkPendingKey] = useState<string | null>(
     null,
   );
+  const [bookmarkError, setBookmarkError] = useState<string | null>(null);
 
   /** Wait for profile defaults before first search in app mode (no URL overrides). */
   const needsProfileDefaults =
@@ -171,7 +172,10 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
   });
 
   const bookmarkedKeys = useMemo(
-    () => new Set(bookmarkKeysQuery.data?.canonicalKeys ?? []),
+    () =>
+      new Set(
+        (bookmarkKeysQuery.data?.canonicalKeys ?? []).map(normalizeBookmarkKey),
+      ),
     [bookmarkKeysQuery.data?.canonicalKeys],
   );
 
@@ -214,7 +218,7 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
           code: "UNAUTHORIZED",
         });
       }
-      const key = job.canonicalKey;
+      const key = normalizeBookmarkKey(job.canonicalKey);
       const isBookmarked = bookmarkedKeys.has(key);
       if (isBookmarked) {
         await apiFetch(`/saved-jobs/${encodeURIComponent(key)}`, {
@@ -239,8 +243,25 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
       });
       return { key, bookmarked: true as const };
     },
-    onMutate: (job) => {
+    onMutate: async (job) => {
+      setBookmarkError(null);
       setBookmarkPendingKey(job.canonicalKey);
+      const key = normalizeBookmarkKey(job.canonicalKey);
+      await queryClient.cancelQueries({ queryKey: ["saved-job-keys"] });
+      const previous = queryClient.getQueryData<SavedJobKeysResponse>([
+        "saved-job-keys",
+      ]);
+      const isBookmarked = (previous?.canonicalKeys ?? []).some(
+        (savedKey) => normalizeBookmarkKey(savedKey) === key,
+      );
+      queryClient.setQueryData<SavedJobKeysResponse>(["saved-job-keys"], {
+        canonicalKeys: isBookmarked
+          ? (previous?.canonicalKeys ?? []).filter(
+              (savedKey) => normalizeBookmarkKey(savedKey) !== key,
+            )
+          : [...(previous?.canonicalKeys ?? []), key],
+      });
+      return { previous };
     },
     onSuccess: (result) => {
       track(
@@ -249,11 +270,23 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
           : AnalyticsEvents.job_unbookmarked,
         { canonicalJobKey: result.key },
       );
-      void queryClient.invalidateQueries({ queryKey: ["saved-job-keys"] });
-      void queryClient.invalidateQueries({ queryKey: ["saved-jobs"] });
+    },
+    onError: (error, _job, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["saved-job-keys"], context.previous);
+      }
+      const message =
+        error instanceof ApiError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : "Could not update bookmark.";
+      setBookmarkError(message);
     },
     onSettled: () => {
       setBookmarkPendingKey(null);
+      void queryClient.invalidateQueries({ queryKey: ["saved-job-keys"] });
+      void queryClient.invalidateQueries({ queryKey: ["saved-jobs"] });
     },
   });
 
@@ -436,7 +469,7 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
   const resolveStatusByKey = useMemo(() => {
     const map: Record<string, SavedJobResolveStatus> = {};
     for (const row of bookmarksQuery.data?.results ?? []) {
-      map[row.canonicalKey] = row.resolveStatus;
+      map[normalizeBookmarkKey(row.canonicalKey)] = row.resolveStatus;
     }
     return map;
   }, [bookmarksQuery.data?.results]);
@@ -584,6 +617,15 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
           taken down.
         </p>
       )}
+
+      {bookmarkError ? (
+        <p
+          role="alert"
+          className="shrink-0 rounded-xl border border-guava-pink/30 bg-guava-pink/10 px-3 py-2 text-sm text-guava-pink"
+        >
+          {bookmarkError}
+        </p>
+      ) : null}
 
       {!online ? (
         <ErrorState

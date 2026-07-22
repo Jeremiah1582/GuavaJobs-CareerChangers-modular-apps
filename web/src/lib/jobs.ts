@@ -4,6 +4,11 @@ import {
 } from "@/lib/adzuna-countries";
 import type { JobListItem } from "@/api/types";
 
+/** Normalize bookmark keys for Set lookups (API stores lowercase). */
+export function normalizeBookmarkKey(canonicalKey: string): string {
+  return canonicalKey.trim().toLowerCase();
+}
+
 /** Encode canonical keys for URL paths (colons → %3A). */
 export function jobDetailPath(canonicalKey: string): string {
   return `/app/jobs/${encodeURIComponent(canonicalKey)}`;

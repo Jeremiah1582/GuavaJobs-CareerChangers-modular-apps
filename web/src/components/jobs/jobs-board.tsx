@@ -6,6 +6,7 @@ import { CircleNotch, MagnifyingGlass } from "@phosphor-icons/react";
 import type { JobListItem, SavedJobResolveStatus } from "@/api/types";
 import { JobCard } from "@/components/jobs/job-card";
 import { JobDetailPanel } from "@/components/jobs/job-detail-panel";
+import { normalizeBookmarkKey } from "@/lib/jobs";
 
 /** Scrollable pane with hidden scrollbars (wheel / trackpad still work). */
 const SCROLL_PANE =
@@ -96,10 +97,13 @@ export function JobsBoard({
         job={job}
         isSelected={activeJob?.canonicalKey === job.canonicalKey}
         onSelect={onSelect}
-        bookmarked={bookmarkedKeys?.has(job.canonicalKey)}
+        bookmarked={bookmarkedKeys?.has(normalizeBookmarkKey(job.canonicalKey))}
         onToggleBookmark={onToggleBookmark}
-        bookmarkPending={bookmarkPendingKey === job.canonicalKey}
-        resolveStatus={resolveStatusByKey?.[job.canonicalKey]}
+        bookmarkPending={
+          bookmarkPendingKey === job.canonicalKey ||
+          bookmarkPendingKey === normalizeBookmarkKey(job.canonicalKey)
+        }
+        resolveStatus={resolveStatusByKey?.[normalizeBookmarkKey(job.canonicalKey)]}
       />
     </li>
   ));

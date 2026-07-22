@@ -1,3 +1,5 @@
+import { getSiteUrl } from "@/lib/site-url";
+
 export type ApiErrorBody = {
   error?: {
     code?: string;
@@ -40,9 +42,7 @@ function resolveApiUrl(path: string): string {
 
   const relative = `${configured}${normalizedPath}`;
   if (typeof window === "undefined") {
-    const site = (
-      process.env.NEXT_PUBLIC_SITE_URL || "http://127.0.0.1:3000"
-    ).replace(/\/$/, "");
+    const site = getSiteUrl();
     return `${site}${relative}`;
   }
   return relative;

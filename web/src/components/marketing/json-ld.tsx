@@ -1,7 +1,7 @@
+import { getSiteUrl } from "@/lib/site-url";
+
 export function SoftwareApplicationJsonLd() {
-  const siteUrl =
-    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ??
-    "http://localhost:3000";
+  const siteUrl = getSiteUrl();
 
   const data = {
     "@context": "https://schema.org",

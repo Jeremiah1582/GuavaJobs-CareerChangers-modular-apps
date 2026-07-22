@@ -23,7 +23,8 @@
     "jobs:search": "node scripts/job-search.mjs"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20",
+    "npm": "10.x"
   },
   "prisma": {
     "seed": "ts-node --transpile-only prisma/seed.ts"

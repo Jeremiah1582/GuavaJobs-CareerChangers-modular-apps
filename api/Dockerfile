@@ -17,8 +17,9 @@ RUN apt-get update -y \
   && apt-get install -y --no-install-recommends openssl \
   && rm -rf /var/lib/apt/lists/*
 
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 # --include=dev overrides NODE_ENV=production from Coolify build-time args
+# Lockfile must be generated with npm 10.x (node:20-slim). npm 12 lockfiles fail npm ci here.
 RUN npm ci --include=dev
 
 COPY prisma ./prisma

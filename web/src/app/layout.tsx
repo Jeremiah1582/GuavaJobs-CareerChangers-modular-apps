@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Providers } from "@/components/providers";
+import { getSiteUrl } from "@/lib/site-url";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -20,9 +21,7 @@ export const metadata: Metadata = {
   },
   description:
     "Honest AI-assisted job applications. Generate tailored letters, see fit before you apply, and track every role.",
-  metadataBase: new URL(
-    process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000",
-  ),
+  metadataBase: new URL(getSiteUrl()),
   openGraph: {
     title: "GuavaJobs",
     description:
