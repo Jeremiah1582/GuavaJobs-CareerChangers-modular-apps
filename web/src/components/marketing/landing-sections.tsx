@@ -50,14 +50,13 @@ export function HonestyStripSection() {
           01 — Honesty
         </p>
         <h2 className="mt-4 max-w-[18ch] text-balance text-3xl font-semibold tracking-tight md:text-5xl md:leading-[1.05]">
-          Apply with a tailored letter without inventing your past.
+          Honestly generate your Job application in seconds without inventing your past.
         </h2>
       </Reveal>
       <Reveal className="md:col-span-5" delay={0.08}>
         <p className="max-w-[36ch] text-base leading-relaxed text-muted-foreground md:ml-auto md:text-right">
-          Find roles that fit. Apply less. Improve every package with honest{" "}
-          <span className="font-medium text-guava-green">fit</span> insights —
-          grounded in your CV, not a fantasy resume.
+          Find roles that fit your unique background. apply less, get more interviews.
+          Experience grounded in your CV, not a fantasy resume.
         </p>
       </Reveal>
     </div>
