@@ -59,6 +59,26 @@
     oklch(0.96 0.045 150 / 0.7) 0%,
     oklch(0.995 0.002 90) 100%
   );
+
+  --wash-landing-pink: linear-gradient(
+    145deg,
+    oklch(0.99 0.01 12) 0%,
+    oklch(0.88 0.12 12) 42%,
+    oklch(0.82 0.14 18 / 0.55) 72%,
+    oklch(0.94 0.04 150 / 0.35) 100%
+  );
+  --wash-landing-mint: linear-gradient(
+    160deg,
+    oklch(0.97 0.03 150) 0%,
+    oklch(0.84 0.11 150) 38%,
+    oklch(0.78 0.13 155 / 0.65) 68%,
+    oklch(0.92 0.06 12 / 0.4) 100%
+  );
+  --wash-landing-blend: linear-gradient(
+    180deg,
+    oklch(0.94 0.06 12) 0%,
+    oklch(0.9 0.08 150) 100%
+  );
 }
 
 @theme inline {

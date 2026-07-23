@@ -37,6 +37,11 @@ import {
 } from "@/lib/onboarding";
 import { ADZUNA_COUNTRIES, normalizeAdzunaCountry } from "@/lib/adzuna-countries";
 import { computeCompletenessFromDraft } from "@/lib/profile-completeness";
+import {
+  clearPendingCv,
+  pendingCvToFile,
+  readPendingCv,
+} from "@/lib/pending-cv";
 import { createClient } from "@/lib/supabase/client";
 
 const saveButtonClass =
@@ -86,6 +91,7 @@ export function ProfileEditor() {
   );
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const pendingCvQueued = useRef(false);
 
   const getToken = useCallback(async () => {
     const supabase = createClient();
@@ -332,6 +338,30 @@ export function ProfileEditor() {
       setCvPending(false);
     }
   }
+
+  useEffect(() => {
+    if (!profile || loading || cvPending || pendingCvQueued.current) return;
+    const pending = readPendingCv();
+    if (!pending) return;
+    pendingCvQueued.current = true;
+    clearPendingCv();
+    void uploadCv(pendingCvToFile(pending));
+    // uploadCv is stable enough for this one-shot landing funnel handoff.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile, loading, cvPending]);
+
+  useEffect(() => {
+    if (loading) return;
+    if (
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("intent") ===
+        "market-fit"
+    ) {
+      document
+        .getElementById("market-fit")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [loading]);
 
   async function retryParse() {
     if (!profile) return;
@@ -767,11 +797,13 @@ export function ProfileEditor() {
       ) : null}
 
       {profile ? (
-        <MarketFitPanel
-          profileId={profile.id}
-          skillsCount={skills.length}
-          getToken={getToken}
-        />
+        <div id="market-fit">
+          <MarketFitPanel
+            profileId={profile.id}
+            skillsCount={skills.length}
+            getToken={getToken}
+          />
+        </div>
       ) : null}
 
       {profile ? (

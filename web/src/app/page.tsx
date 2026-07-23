@@ -1,16 +1,20 @@
-import { LandingFooter } from "@/components/marketing/landing-footer";
+/* Hallmark · genre: playful-professional · macrostructure: Narrative Workflow
+ * theme: Guava custom (pink/green) · enrichment: industry photo backdrop + role chips
+ * nav: N5 floating pill · footer: Ft8 marquee
+ * taste: variance 8 · motion 6 · density 4 · anti-emoji · asymmetric mid-band
+ * hero: soft photo rotation behind black tint — UI stays focal
+ */
 import { LandingHeader } from "@/components/marketing/landing-header";
+import { LandingFooter } from "@/components/marketing/landing-footer";
 import { SoftwareApplicationJsonLd } from "@/components/marketing/json-ld";
-import { SoftOrb } from "@/components/marketing/hero-motion";
-import { HeroStage } from "@/components/marketing/hero-stage";
-import { HeroJobSearch } from "@/components/marketing/hero-job-search";
+import { LandingJobSearchSection } from "@/components/marketing/landing-job-search-section";
+import { LandingCvFitSection } from "@/components/marketing/landing-cv-fit-section";
 import {
   ClosingSection,
-  FreemiumSection,
   HonestyStripSection,
-  ListingsSection,
   LoopSection,
   ProblemSection,
+  ProofBandSection,
 } from "@/components/marketing/landing-sections";
 import { SectionFrame } from "@/components/marketing/section-frame";
 import type { LoopItem } from "@/components/marketing/loop-rail";
@@ -53,43 +57,33 @@ export default function HomePage() {
     <>
       <SoftwareApplicationJsonLd />
       <main className="bg-background text-foreground">
-        <section
-          className="relative overflow-hidden px-4 pb-10 pt-2 md:px-6 md:pb-14"
-          style={{ background: "var(--wash-hero)" }}
-        >
-          <SoftOrb className="left-[-8%] top-[10%] z-0 h-64 w-64 bg-guava-pink/15" />
-          <SoftOrb className="right-[-6%] top-[30%] z-0 h-72 w-72 bg-guava-green/25" />
-          <div className="relative z-10 mx-auto max-w-7xl">
-            <LandingHeader />
-            <div className="mt-4 md:mt-6">
-              <HeroStage>
-                <HeroJobSearch />
-              </HeroStage>
-            </div>
+        <div className="fixed inset-x-0 top-0 z-50 px-[2.5vw] pt-3 md:px-[3vw] md:pt-4">
+          <div className="mx-auto w-[min(94vw,96rem)]">
+            <LandingHeader floating />
           </div>
-        </section>
+        </div>
 
-        <SectionFrame wash="pink" borderTone="pink">
+        <LandingJobSearchSection />
+
+        <SectionFrame wash="plain" borderTone="neutral">
           <HonestyStripSection />
         </SectionFrame>
 
-        <SectionFrame wash="mint" borderTone="green" orbs>
+        <SectionFrame wash="pink" borderTone="pink">
           <ProblemSection />
         </SectionFrame>
 
-        <SectionFrame wash="pink" borderTone="pink" orbs>
+        <SectionFrame wash="mint" borderTone="green">
           <LoopSection items={loop} />
         </SectionFrame>
 
-        <SectionFrame wash="mint" borderTone="green">
-          <FreemiumSection />
-        </SectionFrame>
+        <LandingCvFitSection />
 
         <SectionFrame wash="plain" borderTone="neutral">
-          <ListingsSection />
+          <ProofBandSection />
         </SectionFrame>
 
-        <SectionFrame wash="hero" borderTone="green" orbs>
+        <SectionFrame wash="hero" borderTone="pink">
           <ClosingSection />
         </SectionFrame>
 
