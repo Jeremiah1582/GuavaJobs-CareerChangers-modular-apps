@@ -91,10 +91,6 @@ export function LandingJobSearchSection() {
           </p>
         </Reveal>
 
-        <Reveal className="w-[min(94vw,100%)]" delay={0.06}>
-          <RoleChipMarquee chips={ROLE_CHIPS} onSelect={onChipSelect} />
-        </Reveal>
-
         <Reveal className="w-[min(93vw,100%)]" delay={0.1}>
           <JobsSearchBar
             query={query}
@@ -109,6 +105,12 @@ export function LandingJobSearchSection() {
             pending={pending}
           />
         </Reveal>
+
+        <Reveal className="w-[min(94vw,100%)]" delay={0.06}>
+          <RoleChipMarquee chips={ROLE_CHIPS} onSelect={onChipSelect} />
+        </Reveal>
+
+      
       </div>
     </LandingFullscreenSection>
   );
