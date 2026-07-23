@@ -23,7 +23,6 @@ import {
   RoleChipMarquee,
   type RoleChip,
 } from "@/components/marketing/role-chip-marquee";
-import { SoftOrb } from "@/components/marketing/hero-motion";
 import { normalizeAdzunaCountry } from "@/lib/adzuna-countries";
 
 const ROLE_CHIPS: RoleChip[] = [
@@ -71,16 +70,13 @@ export function LandingJobSearchSection() {
     >
       <HeroIndustryBackdrop />
 
-      <SoftOrb className="left-[-12%] top-[8%] z-[1] h-72 w-72 bg-guava-pink/15" />
-      <SoftOrb className="right-[-10%] bottom-[12%] z-[1] h-80 w-80 bg-guava-green/12" />
-
       <div className="relative z-10 mx-auto flex w-full max-w-[96rem] flex-1 flex-col justify-center gap-10 md:gap-12">
         <Reveal className="w-full max-w-3xl md:max-w-4xl">
-          <p className="font-mono text-[0.7rem] uppercase tracking-[0.22em] text-[oklch(0.86_0.08_12)]">
+          <p className="font-mono text-[0.7rem] uppercase tracking-[0.22em] text-[var(--hero-eyebrow)]">
             Live job search
           </p>
           <h1
-            className="mt-4 max-w-[18ch] text-balance text-[clamp(2rem,5.2vw,3.5rem)] font-semibold leading-[1.05] tracking-tight text-white [overflow-wrap:anywhere] [min-width:0] drop-shadow-[0_2px_24px_oklch(0_0_0_/_0.35)]"
+            className="mt-4 max-w-[18ch] text-balance text-[clamp(2rem,5.2vw,3.5rem)] font-semibold leading-[1.05] tracking-tight text-white [overflow-wrap:anywhere] [min-width:0]"
             style={{ fontStyle: "normal" }}
           >
             How will you position yourself for tomorrow&apos;s jobs?
@@ -91,7 +87,7 @@ export function LandingJobSearchSection() {
           </p>
         </Reveal>
 
-        <Reveal className="w-[min(93vw,100%)]" delay={0.1}>
+        <Reveal className="w-[min(93vw,100%)]" delay={0.06} animate={false}>
           <JobsSearchBar
             query={query}
             location={location}
@@ -106,11 +102,9 @@ export function LandingJobSearchSection() {
           />
         </Reveal>
 
-        <Reveal className="w-[min(94vw,100%)]" delay={0.06}>
+        <Reveal className="w-[min(94vw,100%)]" delay={0.08} animate={false}>
           <RoleChipMarquee chips={ROLE_CHIPS} onSelect={onChipSelect} />
         </Reveal>
-
-      
       </div>
     </LandingFullscreenSection>
   );

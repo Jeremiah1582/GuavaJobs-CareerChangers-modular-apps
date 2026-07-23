@@ -35,7 +35,7 @@ export function SectionFrame({
 
   return (
     <section
-      className={`relative flex min-h-[100dvh] min-h-[110svh] w-full max-w-[100vw] flex-col overflow-hidden border-t ${border} ${className}`}
+      className={`relative flex min-h-[100dvh] min-h-[100svh] w-full flex-col overflow-hidden border-t ${border} ${className}`}
       style={{
         background: washes[wash] ?? "var(--color-paper)",
         ...style,

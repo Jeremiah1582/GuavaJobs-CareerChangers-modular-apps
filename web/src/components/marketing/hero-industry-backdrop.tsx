@@ -46,8 +46,8 @@ const CANDIDATES: HeroIndustryImage[] = [
 const ROTATE_MS = 7500;
 
 /**
- * Soft industry photo backdrop — one image at a time, skips failed loads,
- * never leaves blank squares. Falls back to nothing (parent wash shows).
+ * Soft industry photo backdrop — one image at a time, skips failed loads.
+ * Pauses on hover/focus and when reduced motion is preferred.
  */
 export function HeroIndustryBackdrop({
   candidates = CANDIDATES,
@@ -58,6 +58,7 @@ export function HeroIndustryBackdrop({
   const [available, setAvailable] = useState<HeroIndustryImage[]>([]);
   const [ready, setReady] = useState(false);
   const [index, setIndex] = useState(0);
+  const [paused, setPaused] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -75,7 +76,9 @@ export function HeroIndustryBackdrop({
         ),
       );
       if (cancelled) return;
-      setAvailable(results.filter((item): item is HeroIndustryImage => item != null));
+      setAvailable(
+        results.filter((item): item is HeroIndustryImage => item != null),
+      );
       setReady(true);
     })();
 
@@ -85,20 +88,18 @@ export function HeroIndustryBackdrop({
   }, [candidates]);
 
   const count = available.length;
+  const shouldRotate = count >= 2 && !reduce && !paused;
 
   useEffect(() => {
-    if (count < 2 || reduce) return;
+    if (!shouldRotate) return;
     const id = window.setInterval(() => {
       setIndex((prev) => (prev + 1) % count);
     }, ROTATE_MS);
     return () => window.clearInterval(id);
-  }, [count, reduce]);
+  }, [shouldRotate, count]);
 
   const onImgError = useCallback((src: string) => {
-    setAvailable((prev) => {
-      const next = prev.filter((item) => item.src !== src);
-      return next;
-    });
+    setAvailable((prev) => prev.filter((item) => item.src !== src));
   }, []);
 
   const active = useMemo(() => {
@@ -113,7 +114,11 @@ export function HeroIndustryBackdrop({
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
+      className="pointer-events-auto absolute inset-0 z-0 overflow-hidden"
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      onFocusCapture={() => setPaused(true)}
+      onBlurCapture={() => setPaused(false)}
     >
       <AnimatePresence mode="sync" initial={false}>
         <motion.img
@@ -122,29 +127,35 @@ export function HeroIndustryBackdrop({
           alt=""
           onError={() => onImgError(active.src)}
           className="absolute inset-0 h-full w-full object-cover"
-          initial={reduce ? false : { opacity: 0, scale: 1.04 }}
-          animate={{ opacity: 1, scale: 1 }}
+          initial={reduce ? false : { opacity: 0 }}
+          animate={{ opacity: 1 }}
           exit={reduce ? undefined : { opacity: 0 }}
-          transition={{ duration: reduce ? 0 : 1.1, ease: [0.16, 1, 0.3, 1] }}
+          transition={{
+            duration: reduce ? 0 : 0.9,
+            ease: [0.16, 1, 0.3, 1],
+          }}
         />
       </AnimatePresence>
 
-      {/* Black transparent screen — photos stay atmospheric, not focal */}
       <div
         className="absolute inset-0"
-        style={{
-          background:
-            "linear-gradient(160deg, oklch(0.18 0.02 280 / 0.62) 0%, oklch(0.12 0.02 280 / 0.72) 45%, oklch(0.16 0.04 12 / 0.68) 100%)",
-        }}
+        style={{ background: "var(--hero-photo-scrim)" }}
       />
-      {/* Soft Guava wash so brand colour still reads through */}
       <div
         className="absolute inset-0 opacity-55"
-        style={{
-          background:
-            "linear-gradient(145deg, oklch(0.55 0.14 12 / 0.35) 0%, transparent 42%, oklch(0.5 0.12 150 / 0.28) 100%)",
-        }}
+        style={{ background: "var(--hero-photo-wash)" }}
       />
+
+      {count >= 2 && !reduce ? (
+        <button
+          type="button"
+          aria-pressed={paused}
+          onClick={() => setPaused((p) => !p)}
+          className="absolute bottom-6 right-6 rounded-md border border-white/20 bg-black/35 px-2.5 py-1 font-mono text-[0.65rem] uppercase tracking-wider text-white/80 transition-colors hover:bg-black/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/60"
+        >
+          {paused ? "Play slides" : "Pause slides"}
+        </button>
+      ) : null}
     </div>
   );
 }

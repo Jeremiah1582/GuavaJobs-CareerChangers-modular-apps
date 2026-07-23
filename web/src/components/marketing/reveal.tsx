@@ -3,27 +3,36 @@
 import { motion, useReducedMotion } from "framer-motion";
 import type { ReactNode } from "react";
 
+/**
+ * Scroll reveal — use sparingly (hero / first fold only).
+ * Set `animate={false}` for static sections below the fold.
+ */
 export function Reveal({
   children,
   className,
   delay = 0,
+  animate = true,
 }: {
   children: ReactNode;
   className?: string;
   delay?: number;
+  animate?: boolean;
 }) {
   const reduce = useReducedMotion();
+
+  if (!animate || reduce) {
+    return <div className={className}>{children}</div>;
+  }
 
   return (
     <motion.div
       className={className}
-      initial={reduce ? false : { opacity: 0, y: 22 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, amount: 0.22 }}
+      initial={{ opacity: 0 }}
+      whileInView={{ opacity: 1 }}
+      viewport={{ once: true, amount: 0.15 }}
       transition={{
-        type: "spring",
-        stiffness: 120,
-        damping: 20,
+        duration: 0.45,
+        ease: [0.16, 1, 0.3, 1],
         delay,
       }}
     >
@@ -35,23 +44,27 @@ export function Reveal({
 export function RevealStagger({
   children,
   className,
+  animate = true,
 }: {
   children: ReactNode;
   className?: string;
+  animate?: boolean;
 }) {
   const reduce = useReducedMotion();
+
+  if (!animate || reduce) {
+    return <div className={className}>{children}</div>;
+  }
 
   return (
     <motion.div
       className={className}
-      initial={reduce ? false : "hidden"}
+      initial="hidden"
       whileInView="show"
-      viewport={{ once: true, amount: 0.2 }}
+      viewport={{ once: true, amount: 0.15 }}
       variants={{
         hidden: {},
-        show: {
-          transition: { staggerChildren: 0.08 },
-        },
+        show: { transition: { staggerChildren: 0.06 } },
       }}
     >
       {children}
@@ -75,11 +88,10 @@ export function RevealItem({
         reduce
           ? undefined
           : {
-              hidden: { opacity: 0, y: 14 },
+              hidden: { opacity: 0 },
               show: {
                 opacity: 1,
-                y: 0,
-                transition: { type: "spring", stiffness: 150, damping: 20 },
+                transition: { duration: 0.35, ease: [0.16, 1, 0.3, 1] },
               },
             }
       }

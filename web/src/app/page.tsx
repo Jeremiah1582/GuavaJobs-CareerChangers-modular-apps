@@ -1,8 +1,7 @@
-/* Hallmark · genre: playful-professional · macrostructure: Narrative Workflow
- * theme: Guava custom (pink/green) · enrichment: industry photo backdrop + role chips
+/* Hallmark · genre: playful · macrostructure: Narrative Workflow
+ * theme: Guava custom (pink/green) · enrichment: industry photo backdrop
  * nav: N5 floating pill · footer: Ft8 marquee
- * taste: variance 8 · motion 6 · density 4 · anti-emoji · asymmetric mid-band
- * hero: soft photo rotation behind black tint — UI stays focal
+ * audit-fix: tokens locked · no orbs · paused carousels · static below-fold
  */
 import { LandingHeader } from "@/components/marketing/landing-header";
 import { LandingFooter } from "@/components/marketing/landing-footer";

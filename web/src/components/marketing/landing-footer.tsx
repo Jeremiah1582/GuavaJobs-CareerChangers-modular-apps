@@ -11,7 +11,7 @@ export function LandingFooter() {
   const reduce = useReducedMotion();
 
   return (
-    <footer className="border-t border-guava-green/12 bg-[oklch(0.985_0.008_150)]">
+    <footer className="border-t border-guava-green/12 bg-[var(--footer-surface)]">
       <div
         className="overflow-hidden border-b border-guava-green/10 py-3"
         aria-hidden
