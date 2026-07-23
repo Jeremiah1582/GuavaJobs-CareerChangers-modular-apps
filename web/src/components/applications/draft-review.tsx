@@ -481,7 +481,7 @@ export function DraftReview({ applicationId }: { applicationId: string }) {
   const includeCvInPackage =
     autoGenerateCv || app?.cvChoice === "GENERATED";
   useEffect(() => {
-    if (!app || !generating) return;
+    if (!app?.id || !generating) return;
     void requestGenerationNotificationPermission();
     watchGeneration({ id: app.id, kind: "package", title });
   }, [app?.id, generating, title]);
