@@ -50,6 +50,11 @@ export const envSchema = z
       .string()
       .optional()
       .transform((v) => v === 'True' || v === 'true' || v === '1'),
+    /** Comma-separated emails bootstrapped to OWNER (+ PAID) on first sync. */
+    PLATFORM_OWNER_EMAILS: z
+      .string()
+      .optional()
+      .default('jeremiah.1582@googlemail.com'),
   })
   .refine(
     (env) => Boolean(env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SECRET_KEY),

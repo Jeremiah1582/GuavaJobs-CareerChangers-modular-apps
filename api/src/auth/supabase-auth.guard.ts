@@ -8,6 +8,7 @@ import { Request } from 'express';
 import { IS_PUBLIC_KEY } from '../common/decorators/public.decorator';
 import { AppError } from '../shared/schemas/error.schema';
 import { AuthService } from './auth.service';
+import { AuthenticatedUser } from './auth.types';
 import { SupabaseJwtService } from './supabase-jwt.service';
 
 @Injectable()
@@ -36,8 +37,11 @@ export class SupabaseAuthGuard implements CanActivate {
     const token = header.slice('Bearer '.length).trim();
     const { payload } = await this.jwt.verifyAccessToken(token);
     const authUser = this.authService.claimsToAuthUser(payload);
-    await this.authService.syncUser(authUser);
-    (request as Request & { user: typeof authUser }).user = authUser;
+    const user = await this.authService.syncUser(authUser);
+    (request as Request & { user: AuthenticatedUser }).user = {
+      ...authUser,
+      platformRole: user.platformRole,
+    };
     return true;
   }
 }

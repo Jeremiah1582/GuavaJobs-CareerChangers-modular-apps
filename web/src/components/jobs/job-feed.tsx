@@ -116,7 +116,11 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
         `/profiles/${profileId}`,
         { token },
       );
-      return { defaults: deriveJobSearchDefaults(profile), profileId };
+      return {
+        defaults: deriveJobSearchDefaults(profile),
+        profileId,
+        primaryIndustry: profile.primaryIndustry,
+      };
     },
     enabled: needsProfileDefaults && online,
     staleTime: 60_000,
@@ -146,6 +150,17 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
     staleTime: 60_000,
     retry: false,
   });
+
+  const primaryIndustry = profileDefaultsQuery.data?.primaryIndustry;
+
+  function jobSearchProps(
+    extra: Record<string, string | number | boolean | null>,
+  ) {
+    return {
+      ...extra,
+      ...(primaryIndustry ? { primaryIndustry } : {}),
+    };
+  }
 
   const recommendedCriteria: SearchCriterion[] = (
     marketFitQuery.data?.roles ?? []
@@ -403,12 +418,12 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
     };
     setSubmitted(next);
     syncUrl({ ...next, job: null, view: "search" });
-    track(AnalyticsEvents.job_search, {
+    track(AnalyticsEvents.job_search, jobSearchProps({
       q: query.trim() || null,
       location: location.trim() || null,
       country: next.country,
       page: 1,
-    });
+    }));
   }
 
   function onCriterionSelect(criterion: SearchCriterion) {
@@ -427,13 +442,13 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
     };
     setSubmitted(next);
     syncUrl({ ...next, job: null, view: "search" });
-    track(AnalyticsEvents.job_search, {
+    track(AnalyticsEvents.job_search, jobSearchProps({
       q: criterion.q,
       location: nextLocation.trim() || null,
       country: nextCountry,
       page: 1,
       source: "search_shortcut",
-    });
+    }));
   }
 
   function onSaveSearch() {
@@ -442,12 +457,12 @@ export function JobFeed({ mode = "app" }: JobFeedProps) {
       location,
       country: normalizeAdzunaCountry(country),
     });
-    track(AnalyticsEvents.job_search, {
+    track(AnalyticsEvents.job_search, jobSearchProps({
       q: query.trim() || null,
       location: location.trim() || null,
       country: normalizeAdzunaCountry(country),
       action: "save_search",
-    });
+    }));
   }
 
   const selectJob = useCallback(

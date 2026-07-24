@@ -1,8 +1,16 @@
 import { Injectable } from '@nestjs/common';
-import { UserTier } from '@prisma/client';
+import { PlatformRole, UserTier } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppError } from '../shared/schemas/error.schema';
 import { FREE_AI_GENERATIONS_PER_MONTH } from '../shared/constants/freemium.constants';
+
+function hasUnlimitedAi(tier: UserTier, platformRole: PlatformRole): boolean {
+  return (
+    tier === UserTier.PAID ||
+    platformRole === PlatformRole.ADMIN ||
+    platformRole === PlatformRole.OWNER
+  );
+}
 
 @Injectable()
 export class UsageService {
@@ -10,11 +18,12 @@ export class UsageService {
 
   getUsageSnapshot(
     tier: UserTier,
+    platformRole: PlatformRole,
     aiGenerationsUsedPeriod: number,
     usagePeriodStart: Date | null,
   ) {
-    const limit =
-      tier === UserTier.FREE ? FREE_AI_GENERATIONS_PER_MONTH : null;
+    const unlimited = hasUnlimitedAi(tier, platformRole);
+    const limit = unlimited ? null : FREE_AI_GENERATIONS_PER_MONTH;
 
     return {
       tier,
@@ -31,7 +40,7 @@ export class UsageService {
 
     const rolled = await this.rolloverIfNeeded(user.id, user.usagePeriodStart);
 
-    if (user.tier === UserTier.PAID) {
+    if (hasUnlimitedAi(user.tier, user.platformRole)) {
       return;
     }
 

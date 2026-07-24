@@ -26,6 +26,12 @@ enum UserTier {
   PAID
 }
 
+enum PlatformRole {
+  USER
+  ADMIN
+  OWNER
+}
+
 enum SeniorityLevel {
   INTERN
   JUNIOR
@@ -123,8 +129,9 @@ model User {
   linkedinUrl String?
   githubUrl   String?
 
-  tier                    UserTier  @default(FREE)
-  aiGenerationsUsedPeriod Int       @default(0) @map("ai_generations_used_period")
+  tier                    UserTier     @default(FREE)
+  platformRole            PlatformRole @default(USER)
+  aiGenerationsUsedPeriod Int          @default(0) @map("ai_generations_used_period")
   usagePeriodStart        DateTime?
 
   // Reserved home for AI Career Consultation (v2): consultation answers,
@@ -141,7 +148,34 @@ model User {
   savedJobs        SavedJob[]
 
   @@index([email])
+  @@index([platformRole])
   @@map("users")
+}
+
+// ─── First-party analytics (hybrid with PostHog) ─────────────────────────────
+
+model AnalyticsEvent {
+  id         String   @id @default(cuid())
+  userId     String?
+  event      String
+  properties Json     @default("{}")
+  createdAt  DateTime @default(now())
+
+  @@index([event, createdAt])
+  @@index([userId, createdAt])
+  @@map("analytics_events")
+}
+
+model AnalyticsSession {
+  id         String    @id // client session UUID
+  userId     String
+  startedAt  DateTime  @default(now())
+  lastSeenAt DateTime  @updatedAt
+  endedAt    DateTime?
+  durationMs Int?
+
+  @@index([userId, startedAt])
+  @@map("analytics_sessions")
 }
 
 // ─── Profile (job-search persona; many per user in v1.1+) ─────────────────────

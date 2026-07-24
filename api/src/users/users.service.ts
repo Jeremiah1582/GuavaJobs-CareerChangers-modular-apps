@@ -83,6 +83,7 @@ export class UsersService {
     const defaultProfile = user.profiles[0] ?? null;
     const usage = this.usage.getUsageSnapshot(
       user.tier,
+      user.platformRole,
       user.aiGenerationsUsedPeriod,
       user.usagePeriodStart,
     );
@@ -95,6 +96,7 @@ export class UsersService {
       linkedinUrl: user.linkedinUrl,
       githubUrl: user.githubUrl,
       tier: user.tier,
+      platformRole: user.platformRole,
       defaultProfileId: defaultProfile?.id ?? null,
       defaultProfile: defaultProfile
         ? {

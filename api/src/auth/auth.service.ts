@@ -1,7 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
-import { ProfileIndustry, SeniorityLevel, User } from '@prisma/client';
+import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { PlatformRole, Prisma, ProfileIndustry, SeniorityLevel, User, UserTier } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { EnvConfig } from '../config/env.validation';
 import { AppError } from '../shared/schemas/error.schema';
 import { AuthenticatedUser, JwtClaims } from './auth.types';
 
@@ -10,11 +11,12 @@ const DEFAULT_JOB_TITLE = 'Job Seeker';
 
 @Injectable()
 export class AuthService {
-  private readonly logger = new Logger(AuthService.name);
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService<EnvConfig, true>,
+  ) {}
 
-  constructor(private readonly prisma: PrismaService) {}
-
-  claimsToAuthUser(claims: JwtClaims): AuthenticatedUser {
+  claimsToAuthUser(claims: JwtClaims): Omit<AuthenticatedUser, 'platformRole'> {
     const email = claims.email;
     if (!email) {
       throw new AppError('UNAUTHORIZED', 'JWT missing email claim', 401);
@@ -35,8 +37,13 @@ export class AuthService {
   }
 
   /** Upsert local User + ensure exactly one default Profile exists. */
-  async syncUser(authUser: AuthenticatedUser): Promise<User> {
+  async syncUser(
+    authUser: Omit<AuthenticatedUser, 'platformRole'>,
+  ): Promise<User> {
     try {
+      const ownerEmails = this.getOwnerEmails();
+      const isOwnerEmail = ownerEmails.has(authUser.email.toLowerCase());
+
       const byId = await this.prisma.user.findUnique({
         where: { id: authUser.id },
       });
@@ -48,6 +55,9 @@ export class AuthService {
             email: authUser.email,
             name: authUser.name,
             ...(authUser.imgUrl !== null ? { imgUrl: authUser.imgUrl } : {}),
+            ...(isOwnerEmail && byId.platformRole !== PlatformRole.OWNER
+              ? { platformRole: PlatformRole.OWNER, tier: UserTier.PAID }
+              : {}),
           },
         });
         await this.ensureDefaultProfile(user.id);
@@ -59,7 +69,7 @@ export class AuthService {
       });
 
       if (byEmail) {
-        const user = await this.rekeyUser(byEmail.id, authUser);
+        const user = await this.rekeyUser(byEmail.id, authUser, isOwnerEmail);
         await this.ensureDefaultProfile(user.id);
         return user;
       }
@@ -70,9 +80,13 @@ export class AuthService {
           email: authUser.email,
           name: authUser.name,
           imgUrl: authUser.imgUrl,
+          ...(isOwnerEmail
+            ? { platformRole: PlatformRole.OWNER, tier: UserTier.PAID }
+            : {}),
         },
       });
       await this.ensureDefaultProfile(user.id);
+      await this.recordAnalyticsEvent(user.id, 'signup_completed', {});
       return user;
     } catch (err) {
       if (err instanceof AppError) {
@@ -84,11 +98,35 @@ export class AuthService {
       ) {
         throw err;
       }
-      this.logger.error(
-        `syncUser failed for ${authUser.id}`,
-        err instanceof Error ? err.stack : String(err),
-      );
       throw err;
+    }
+  }
+
+  private getOwnerEmails(): Set<string> {
+    const raw = this.config.get('PLATFORM_OWNER_EMAILS', { infer: true }) ?? '';
+    return new Set(
+      raw
+        .split(',')
+        .map((e) => e.trim().toLowerCase())
+        .filter(Boolean),
+    );
+  }
+
+  private async recordAnalyticsEvent(
+    userId: string,
+    event: string,
+    properties: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      await this.prisma.analyticsEvent.create({
+        data: {
+          userId,
+          event,
+          properties: properties as Prisma.InputJsonValue,
+        },
+      });
+    } catch {
+      // Analytics must never block auth
     }
   }
 
@@ -98,7 +136,8 @@ export class AuthService {
    */
   private async rekeyUser(
     oldId: string,
-    authUser: AuthenticatedUser,
+    authUser: Omit<AuthenticatedUser, 'platformRole'>,
+    isOwnerEmail: boolean,
   ): Promise<User> {
     const old = await this.prisma.user.findUniqueOrThrow({
       where: { id: oldId },
@@ -118,11 +157,13 @@ export class AuthService {
         name: authUser.name,
         imgUrl: authUser.imgUrl,
         tier: old.tier,
+        platformRole: isOwnerEmail ? PlatformRole.OWNER : old.platformRole,
         aiGenerationsUsedPeriod: old.aiGenerationsUsedPeriod,
         usagePeriodStart: old.usagePeriodStart,
         linkedinUrl: old.linkedinUrl,
         githubUrl: old.githubUrl,
         metadata: old.metadata ?? undefined,
+        ...(isOwnerEmail ? { tier: UserTier.PAID } : {}),
       },
     });
 

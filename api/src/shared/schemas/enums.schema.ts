@@ -25,9 +25,12 @@ export const seniorityLevelSchema = z.enum([
 
 export const userTierSchema = z.enum(['FREE', 'PAID']);
 
+export const platformRoleSchema = z.enum(['USER', 'ADMIN', 'OWNER']);
+
 export const salaryPeriodSchema = z.enum(['ANNUAL', 'MONTHLY', 'HOURLY']);
 
 export type ProfileIndustry = z.infer<typeof profileIndustrySchema>;
 export type SeniorityLevel = z.infer<typeof seniorityLevelSchema>;
 export type UserTier = z.infer<typeof userTierSchema>;
+export type PlatformRole = z.infer<typeof platformRoleSchema>;
 export type SalaryPeriod = z.infer<typeof salaryPeriodSchema>;

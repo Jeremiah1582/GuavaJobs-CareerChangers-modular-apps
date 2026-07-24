@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { userTierSchema } from './enums.schema';
+import { platformRoleSchema, userTierSchema } from './enums.schema';
 
 export const profileSummarySchema = z.object({
   id: z.string(),
@@ -32,6 +32,7 @@ export const userResponseSchema = z.object({
   linkedinUrl: z.string().nullable(),
   githubUrl: z.string().nullable(),
   tier: userTierSchema,
+  platformRole: platformRoleSchema,
   defaultProfileId: z.string().nullable(),
   defaultProfile: profileSummarySchema.nullable(),
   usage: usageSummarySchema,

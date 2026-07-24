@@ -9,11 +9,14 @@ export type UserPreferences = {
   autoGenerateTailoredCv?: boolean;
 };
 
+export type PlatformRole = "USER" | "ADMIN" | "OWNER";
+
 export type MeResponse = {
   id: string;
   email: string;
   name: string;
   tier: string;
+  platformRole: PlatformRole;
   defaultProfileId: string | null;
   defaultProfile: {
     id: string;
@@ -428,3 +431,54 @@ export const GENERATION_BACKGROUND_HINT_MS = 120_000;
 
 /** UI: offer manual retry if still in-flight after this long. */
 export const GENERATION_STUCK_UI_MS = 300_000;
+
+export type EngagementSummary = {
+  signups: {
+    total: number;
+    series: Array<{ date: string; count: number }>;
+  };
+  peaks: {
+    weekday: { day: number; label: string; count: number };
+    dayOfMonth: { day: number; count: number };
+  };
+  sessions: {
+    avgDurationMs: number | null;
+    totalEnded: number;
+  };
+  topRegions: Array<{
+    country: string;
+    searches: number;
+    logins: number;
+    total: number;
+  }>;
+  topSearchTerms: Array<{ term: string; count: number }>;
+  topIndustries: Array<{ industry: string; count: number }>;
+};
+
+export type AdminEngagementUser = {
+  id: string;
+  name: string;
+  tier: string;
+  platformRole: PlatformRole;
+  region: string | null;
+  joinedAt: string;
+  lastActiveAt: string | null;
+};
+
+export type AdminOwnerUser = AdminEngagementUser & {
+  email: string;
+};
+
+export type AdminEngagementUsersResponse = {
+  results: AdminEngagementUser[];
+  page: number;
+  limit: number;
+  total: number;
+};
+
+export type AdminOwnerUsersResponse = {
+  results: AdminOwnerUser[];
+  page: number;
+  limit: number;
+  total: number;
+};

@@ -1,4 +1,6 @@
 import posthog from "posthog-js";
+import { apiFetch } from "@/api/client";
+import { getAccessTokenOrNull } from "@/lib/session";
 
 /** PostHog event names — keep identical across web and (later) mobile. */
 export const AnalyticsEvents = {
@@ -31,10 +33,29 @@ export const AnalyticsEvents = {
   application_deleted: "application_deleted",
   manual_application_created: "manual_application_created",
   pdf_exported: "pdf_exported",
+  session_heartbeat: "session_heartbeat",
+  session_end: "session_end",
 } as const;
 
 export type AnalyticsEvent =
   (typeof AnalyticsEvents)[keyof typeof AnalyticsEvents];
+
+/** Events mirrored to POST /analytics/events (allowlisted server-side). */
+const INGEST_EVENTS = new Set<string>([
+  AnalyticsEvents.signup_completed,
+  AnalyticsEvents.login_completed,
+  AnalyticsEvents.job_search,
+  AnalyticsEvents.session_heartbeat,
+  AnalyticsEvents.session_end,
+]);
+
+export function identifyAnalyticsUser(userId: string): void {
+  if (typeof window === "undefined") return;
+  const key = process.env.NEXT_PUBLIC_POSTHOG_KEY;
+  if (key) {
+    posthog.identify(userId);
+  }
+}
 
 export function track(
   event: AnalyticsEvent,
@@ -45,10 +66,87 @@ export function track(
   const key = process.env.NEXT_PUBLIC_POSTHOG_KEY;
   if (key) {
     posthog.capture(event, properties);
-    return;
+  } else if (
+    process.env.NODE_ENV === "development" &&
+    process.env.DEBUG_ANALYTICS
+  ) {
+    console.debug("[analytics]", event, properties ?? {});
   }
 
-  if (process.env.NODE_ENV === "development" && process.env.DEBUG_ANALYTICS) {
-    console.debug("[analytics]", event, properties ?? {});
+  if (INGEST_EVENTS.has(event)) {
+    void dualWriteEvent(event, properties);
+  }
+}
+
+async function dualWriteEvent(
+  event: string,
+  properties?: Record<string, string | number | boolean | null>,
+): Promise<void> {
+  try {
+    const token = await getAccessTokenOrNull();
+    if (!token) return;
+
+    await apiFetch("/analytics/events", {
+      method: "POST",
+      token,
+      body: JSON.stringify({
+        events: [
+          {
+            event,
+            properties: properties ?? {},
+            timestamp: new Date().toISOString(),
+          },
+        ],
+      }),
+    });
+  } catch {
+    // Fire-and-forget — never block UX
+  }
+}
+
+export async function sendSessionHeartbeat(sessionId: string): Promise<void> {
+  try {
+    const token = await getAccessTokenOrNull();
+    if (!token) return;
+
+    await apiFetch("/analytics/sessions", {
+      method: "POST",
+      token,
+      body: JSON.stringify({ sessionId }),
+    });
+  } catch {
+    /* ignore */
+  }
+}
+
+export async function sendSessionEnded(
+  sessionId: string,
+  durationMs: number,
+): Promise<void> {
+  try {
+    const token = await getAccessTokenOrNull();
+    if (!token) return;
+
+    await apiFetch("/analytics/sessions", {
+      method: "POST",
+      token,
+      body: JSON.stringify({ sessionId, ended: true, durationMs }),
+    });
+
+    await apiFetch("/analytics/events", {
+      method: "POST",
+      token,
+      body: JSON.stringify({
+        events: [
+          {
+            event: AnalyticsEvents.session_end,
+            properties: { durationMs },
+            timestamp: new Date().toISOString(),
+          },
+        ],
+      }),
+    });
+  } catch {
+    /* ignore */
   }
 }

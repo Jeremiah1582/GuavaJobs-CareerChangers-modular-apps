@@ -6,6 +6,7 @@ import {
   Briefcase,
   CaretDoubleLeft,
   CaretDoubleRight,
+  ChartBar,
   ClipboardText,
   GearSix,
   SignOut,
@@ -16,13 +17,20 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { HAS_APPS_COOKIE } from "@/lib/applications";
 import { ONBOARDING_COOKIE } from "@/lib/onboarding";
+import { isStaffRole, useMeQuery } from "@/hooks/use-me";
 
-const links = [
+const baseLinks = [
   { href: "/app/jobs", label: "Jobs", icon: Briefcase },
   { href: "/app/applications", label: "Applications", icon: ClipboardText },
   { href: "/app/profile", label: "Profile", icon: UserCircle },
   { href: "/app/settings", label: "Settings", icon: GearSix },
 ] as const;
+
+const adminLink = {
+  href: "/app/admin",
+  label: "Admin",
+  icon: ChartBar,
+} as const;
 
 const STORAGE_KEY = "gj_sidebar_collapsed";
 
@@ -41,8 +49,13 @@ const COLLAPSED = "w-14 md:w-16";
 export function AppSidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const { data: me } = useMeQuery();
   const [collapsed, setCollapsed] = useState(false);
   const [ready, setReady] = useState(false);
+
+  const links = isStaffRole(me?.platformRole)
+    ? [...baseLinks, adminLink]
+    : [...baseLinks];
 
   useEffect(() => {
     try {
@@ -50,7 +63,6 @@ export function AppSidebar() {
       if (stored === "1" || stored === "0") {
         setCollapsed(stored === "1");
       } else {
-        // Default: collapsed on tablet, expanded on large desktop
         const preferCollapsed =
           typeof window !== "undefined" &&
           window.matchMedia("(max-width: 1023px)").matches;
@@ -62,7 +74,6 @@ export function AppSidebar() {
     setReady(true);
   }, []);
 
-  // Keep preference in sync when crossing tablet/desktop without a stored override
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 1023px)");
     function onChange(e: MediaQueryListEvent) {

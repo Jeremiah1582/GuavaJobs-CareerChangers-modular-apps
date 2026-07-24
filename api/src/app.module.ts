@@ -16,6 +16,8 @@ import { RedisModule } from './redis/redis.module';
 import { UsersModule } from './users/users.module';
 import { MarketFitModule } from './market-fit/market-fit.module';
 import { SavedJobsModule } from './saved-jobs/saved-jobs.module';
+import { AdminModule } from './admin/admin.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 
 @Module({
   imports: [
@@ -31,6 +33,8 @@ import { SavedJobsModule } from './saved-jobs/saved-jobs.module';
     MarketFitModule,
     JobsModule,
     SavedJobsModule,
+    AdminModule,
+    AnalyticsModule,
     ApplicationsModule,
     AutofillModule,
     HealthModule,

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { apiFetch, ApiError } from "@/api/client";
-import { AnalyticsEvents, track } from "@/lib/analytics";
+import { AnalyticsEvents, identifyAnalyticsUser, track } from "@/lib/analytics";
 import { paperInputClass } from "@/components/ui/paper-panel";
 
 type Mode = "sign-in" | "sign-up" | "forgot-password";
@@ -83,6 +83,7 @@ export function AuthForm({
         const token = data.session?.access_token;
         if (token) {
           await apiFetch("/me", { token });
+          identifyAnalyticsUser(data.user?.id ?? data.session?.user?.id ?? "");
           track(AnalyticsEvents.signup_completed);
           router.replace(nextPath);
           router.refresh();
@@ -103,6 +104,7 @@ export function AuthForm({
       if (!token) throw new Error("No session returned after sign in");
 
       await apiFetch("/me", { token });
+      identifyAnalyticsUser(data.user?.id ?? data.session?.user?.id ?? "");
       track(AnalyticsEvents.login_completed);
       router.replace(nextPath);
       router.refresh();

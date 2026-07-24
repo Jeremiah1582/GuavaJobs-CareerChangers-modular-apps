@@ -12,6 +12,8 @@ export * from './schemas/career-cv.schema';
 export * from './schemas/error.schema';
 export * from './schemas/market-fit.schema';
 export * from './schemas/cv-pdf.schema';
+export * from './schemas/analytics.schema';
+export * from './schemas/admin.schema';
 
 export { FREE_AI_GENERATIONS_PER_MONTH } from './constants/freemium.constants';
 export {
