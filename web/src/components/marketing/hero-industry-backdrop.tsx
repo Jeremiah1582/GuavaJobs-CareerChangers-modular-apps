@@ -151,7 +151,7 @@ export function HeroIndustryBackdrop({
           type="button"
           aria-pressed={paused}
           onClick={() => setPaused((p) => !p)}
-          className="absolute bottom-6 right-6 rounded-md border border-white/20 bg-black/35 px-2.5 py-1 font-mono text-[0.65rem] uppercase tracking-wider text-white/80 transition-colors hover:bg-black/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/60"
+          className="absolute bottom-4 right-4 rounded-md border border-white/20 bg-black/35 px-2.5 py-1.5 font-mono text-[0.65rem] uppercase tracking-wider text-white/80 transition-colors hover:bg-black/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/60 sm:bottom-6 sm:right-6"
         >
           {paused ? "Play slides" : "Pause slides"}
         </button>

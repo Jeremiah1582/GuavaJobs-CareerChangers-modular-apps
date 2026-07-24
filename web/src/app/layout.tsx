@@ -20,12 +20,12 @@ export const metadata: Metadata = {
     template: "%s · GuavaJobs",
   },
   description:
-    "Honest AI-assisted job applications. Generate tailored letters, see fit before you apply, and track every role.",
+    "Discover, Generate, Apply and Track your job applications with GuavaJobs - the honest AI-assisted job application platform for career changers and job seekers.",
   metadataBase: new URL(getSiteUrl()),
   openGraph: {
     title: "GuavaJobs",
     description:
-      "Honest AI-assisted job applications for career changers and job seekers.",
+      "Discover, Generate, Apply and Track your job applications with GuavaJobs - the honest AI-assisted job application platform for career changers and job seekers.",
     type: "website",
     images: [
       {
@@ -40,7 +40,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "GuavaJobs",
     description:
-      "Honest AI-assisted job applications for career changers and job seekers.",
+      "Discover, Generate, Apply and Track your job applications with GuavaJobs - the honest AI-assisted job application platform for career changers and job seekers.",
     images: ["/og.png"],
   },
   robots: {

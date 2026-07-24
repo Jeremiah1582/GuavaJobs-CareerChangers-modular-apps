@@ -132,10 +132,10 @@ export function LandingCvFitSection() {
       id="cv-fit"
       wash="mint"
       aria-label="CV market fit"
-      className="justify-center px-[2.5vw] pb-16 pt-20 md:px-[3vw] md:pb-24"
+      className="justify-center px-4 pb-12 pt-16 sm:px-5 sm:pb-16 md:px-6 md:pb-24 md:pt-20"
     >
-      <div className="relative z-10 mx-auto flex w-full max-w-[96rem] flex-1 flex-col justify-center gap-10 md:gap-12">
-        <Reveal className="w-full max-w-3xl" animate={false}>
+      <div className="relative z-10 mx-auto flex w-full min-w-0 max-w-[96rem] flex-1 flex-col justify-center gap-6 sm:gap-8 md:gap-12">
+        <Reveal className="w-full min-w-0 max-w-3xl" animate={false}>
           <h2
             className="max-w-[16ch] text-balance text-[clamp(1.85rem,5vw,3.25rem)] font-semibold leading-[1.08] tracking-tight text-foreground [overflow-wrap:anywhere] [min-width:0]"
             style={{ fontStyle: "normal" }}
@@ -148,7 +148,7 @@ export function LandingCvFitSection() {
           </p>
         </Reveal>
 
-        <div className="w-[min(92vw,42rem)]">
+        <div className="w-full min-w-0 max-w-2xl">
           {phase === "idle" ? (
             <div
               role="button"
@@ -234,12 +234,12 @@ export function LandingCvFitSection() {
                   ))}
                 </ul>
 
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 bg-white/85 px-6 text-center">
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-white/85 px-4 py-6 text-center sm:gap-5 sm:px-6">
                   <span className="flex size-12 items-center justify-center rounded-full bg-guava-pink/10 text-guava-pink">
                     <LockKey className="size-6" weight="duotone" />
                   </span>
-                  <div className="max-w-sm space-y-2">
-                    <p className="text-lg font-semibold text-foreground">
+                  <div className="max-w-sm min-w-0 space-y-2">
+                    <p className="text-base font-semibold text-foreground sm:text-lg">
                       {signedIn
                         ? "Open your profile to see full results"
                         : "Create a free account to unlock your report"}
@@ -249,9 +249,14 @@ export function LandingCvFitSection() {
                       private until you sign in. No invented experience — ever.
                     </p>
                   </div>
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <div className="flex w-full max-w-xs flex-col gap-3 sm:max-w-none sm:w-auto sm:flex-row sm:items-center sm:justify-center">
                     {signedIn ? (
-                      <SpringCta href="/app/profile" variant="green" withArrow>
+                      <SpringCta
+                        href="/app/profile"
+                        variant="green"
+                        withArrow
+                        className="w-full sm:w-auto"
+                      >
                         View market fit
                       </SpringCta>
                     ) : (
@@ -260,12 +265,13 @@ export function LandingCvFitSection() {
                           href={MARKET_FIT_SIGNUP_PATH}
                           variant="green"
                           withArrow
+                          className="w-full sm:w-auto"
                         >
                           Sign up free
                         </SpringCta>
                         <Link
                           href={MARKET_FIT_SIGNIN_PATH}
-                          className="text-sm font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-guava-green hover:underline"
+                          className="inline-flex min-h-11 items-center justify-center text-sm font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-guava-green hover:underline"
                         >
                           Sign in
                         </Link>

@@ -66,12 +66,12 @@ export function LandingJobSearchSection() {
       id="search"
       wash="photo"
       aria-label="Search jobs"
-      className="justify-center px-[2.5vw] pb-16 pt-24 md:px-[3vw] md:pb-20 md:pt-28"
+      className="justify-center px-4 pb-12 pt-[calc(4.25rem+env(safe-area-inset-top))] sm:px-5 sm:pb-16 md:px-6 md:pb-20 md:pt-28"
     >
       <HeroIndustryBackdrop />
 
-      <div className="relative z-10 mx-auto flex w-full max-w-[96rem] flex-1 flex-col justify-center gap-10 md:gap-12">
-        <Reveal className="w-full max-w-3xl md:max-w-4xl">
+      <div className="relative z-10 mx-auto flex w-full min-w-0 max-w-[96rem] flex-1 flex-col justify-center gap-6 sm:gap-8 md:gap-12">
+        <Reveal className="w-full min-w-0 max-w-3xl md:max-w-4xl">
           <p className="font-mono text-[0.7rem] uppercase tracking-[0.22em] text-[var(--hero-eyebrow)]">
             Live job search
           </p>
@@ -87,7 +87,7 @@ export function LandingJobSearchSection() {
           </p>
         </Reveal>
 
-        <Reveal className="w-[min(93vw,100%)]" delay={0.06} animate={false}>
+        <Reveal className="w-full min-w-0" delay={0.06} animate={false}>
           <JobsSearchBar
             query={query}
             location={location}
@@ -102,7 +102,7 @@ export function LandingJobSearchSection() {
           />
         </Reveal>
 
-        <Reveal className="w-[min(94vw,100%)]" delay={0.08} animate={false}>
+        <Reveal className="w-full min-w-0" delay={0.08} animate={false}>
           <RoleChipMarquee chips={ROLE_CHIPS} onSelect={onChipSelect} />
         </Reveal>
       </div>

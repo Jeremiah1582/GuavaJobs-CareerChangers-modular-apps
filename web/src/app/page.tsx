@@ -55,9 +55,9 @@ export default function HomePage() {
   return (
     <>
       <SoftwareApplicationJsonLd />
-      <main className="bg-background text-foreground">
-        <div className="fixed inset-x-0 top-0 z-50 px-[2.5vw] pt-3 md:px-[3vw] md:pt-4">
-          <div className="mx-auto w-[min(94vw,96rem)]">
+      <main className="min-w-0 bg-background text-foreground">
+        <div className="fixed inset-x-0 top-0 z-50 px-3 pt-[max(0.75rem,env(safe-area-inset-top))] sm:px-4 md:px-6 md:pt-4">
+          <div className="mx-auto w-full max-w-[96rem]">
             <LandingHeader floating />
           </div>
         </div>

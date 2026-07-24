@@ -35,13 +35,13 @@ export function SectionFrame({
 
   return (
     <section
-      className={`relative flex min-h-[100dvh] min-h-[100svh] w-full flex-col overflow-hidden border-t ${border} ${className}`}
+      className={`relative flex min-h-[100dvh] min-h-[100svh] w-full min-w-0 flex-col overflow-x-clip border-t ${border} ${className}`}
       style={{
         background: washes[wash] ?? "var(--color-paper)",
         ...style,
       }}
     >
-      <div className="relative z-10 flex w-full flex-1 flex-col justify-center">
+      <div className="relative z-10 flex w-full min-w-0 flex-1 flex-col justify-center">
         {children}
       </div>
     </section>

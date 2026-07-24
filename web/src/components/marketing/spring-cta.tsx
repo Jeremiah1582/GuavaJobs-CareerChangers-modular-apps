@@ -32,7 +32,7 @@ export function SpringCta({
   return (
     <Link
       href={href}
-      className={`inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-medium transition-[filter,border-color] duration-200 ${styles[variant]} ${className}`}
+      className={`inline-flex min-h-11 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-medium transition-[filter,border-color] duration-200 sm:px-5 ${styles[variant]} ${className}`}
     >
       {children}
       {withArrow ? (

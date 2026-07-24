@@ -29,7 +29,7 @@ export function LandingFullscreenSection({
     <section
       id={id}
       aria-label={ariaLabel}
-      className={`relative flex min-h-[100dvh] min-h-[100svh] w-full flex-col overflow-hidden ${className}`}
+      className={`relative flex min-h-[100dvh] min-h-[100svh] w-full min-w-0 flex-col overflow-x-clip ${className}`}
       style={{
         background: washes[wash],
         ...style,

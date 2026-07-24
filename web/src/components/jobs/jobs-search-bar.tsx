@@ -166,7 +166,7 @@ export function JobsSearchBar({
   return (
     <form
       onSubmit={handleSubmit}
-      className="flex w-full flex-col gap-2.5 rounded-2xl border border-guava-green/20 bg-white/90 p-2.5 shadow-sm sm:p-2 sm:pl-3"
+      className="flex w-full min-w-0 flex-col gap-2.5 rounded-2xl border border-guava-green/20 bg-white/90 p-3 shadow-sm sm:p-2 sm:pl-3"
     >
       <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
         <div className="relative min-w-0 flex-1">

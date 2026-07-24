@@ -48,7 +48,7 @@ export function LoopRail({ items }: { items: readonly LoopItem[] }) {
         return (
           <motion.li
             key={item.title}
-            className="group grid gap-4 py-7 md:grid-cols-12 md:items-baseline md:gap-8 md:py-9"
+            className="group grid min-w-0 gap-3 py-6 sm:gap-4 sm:py-7 md:grid-cols-12 md:items-baseline md:gap-8 md:py-9"
             variants={
               reduce
                 ? undefined
@@ -66,7 +66,7 @@ export function LoopRail({ items }: { items: readonly LoopItem[] }) {
                   }
             }
           >
-            <div className="flex items-center gap-3 md:col-span-2">
+            <div className="flex min-w-0 items-center gap-3 md:col-span-2">
               <span
                 className={`font-mono text-2xl font-semibold tracking-tighter md:text-3xl ${
                   greenTone ? "text-guava-green" : "text-guava-pink"
@@ -83,22 +83,22 @@ export function LoopRail({ items }: { items: readonly LoopItem[] }) {
               />
             </div>
 
-            <div className="md:col-span-3">
-              <div className="flex items-center gap-2.5">
+            <div className="min-w-0 md:col-span-3">
+              <div className="flex min-w-0 items-center gap-2.5">
                 <Icon
-                  className={`hidden size-5 md:block ${
+                  className={`hidden size-5 shrink-0 md:block ${
                     greenTone ? "text-guava-green" : "text-guava-pink"
                   }`}
                   weight="duotone"
                   aria-hidden
                 />
-                <h3 className="text-lg font-semibold tracking-tight">
+                <h3 className="min-w-0 text-lg font-semibold tracking-tight [overflow-wrap:anywhere]">
                   {item.title}
                 </h3>
               </div>
             </div>
 
-            <p className="max-w-[52ch] text-sm leading-relaxed text-muted-foreground md:col-span-7 md:text-base">
+            <p className="min-w-0 max-w-[52ch] text-sm leading-relaxed text-muted-foreground md:col-span-7 md:text-base">
               {item.body}
             </p>
           </motion.li>
